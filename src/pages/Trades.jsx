@@ -189,8 +189,8 @@ export default function Trades() {
 
     const handleOpenTargetSlModal = (trade) => {
         setSelectedTrade(trade);
-        setTargetPrice(trade.target ? String(trade.target) : '');
-        setStopLoss(trade.stop_loss ? String(trade.stop_loss) : '');
+        setTargetPrice(trade.target || trade.target_price ? String(trade.target || trade.target_price) : '');
+        setStopLoss(trade.stop_loss || trade.stopLoss || trade.sl ? String(trade.stop_loss || trade.stopLoss || trade.sl) : '');
         setErrorMessage('');
         setShowTargetSlModal(true);
     };
@@ -521,16 +521,56 @@ export default function Trades() {
                                     </div>
 
                                     {/* Row 3: Entry Price Info & Set Target/SL Button */}
-                                    <div style={styles.apkActiveRow3}>
-                                        <div style={styles.apkActiveLeftCol}>
-                                            <span style={styles.apkActiveEntryText}>
-                                                {isBuy ? 'Bought' : 'Sold'} at {formatPrice(trade.entryPrice)}
-                                            </span>
-                                        </div>
-                                        <button style={styles.apkActiveTargetBtn} onClick={() => handleOpenTargetSlModal(trade)}>
-                                            Set Target/SL
-                                        </button>
-                                    </div>
+                                    {(() => {
+                                        const targetVal = trade.target || trade.target_price;
+                                        const slVal = trade.stop_loss || trade.stopLoss || trade.sl;
+                                        const hasTargetOrSL = !!(targetVal || slVal);
+                                        return (
+                                            <>
+                                                <div style={styles.apkActiveRow3}>
+                                                    <div style={styles.apkActiveLeftCol}>
+                                                        <span style={styles.apkActiveEntryText}>
+                                                            {isBuy ? 'Bought' : 'Sold'} at {formatPrice(trade.entryPrice)}
+                                                        </span>
+                                                    </div>
+                                                    <button style={styles.apkActiveTargetBtn} onClick={() => handleOpenTargetSlModal(trade)}>
+                                                        {hasTargetOrSL ? 'Edit Target/SL' : 'Set Target/SL'}
+                                                    </button>
+                                                </div>
+
+                                                {hasTargetOrSL && (
+                                                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px', marginBottom: '4px' }}>
+                                                        {targetVal && (
+                                                            <span style={{
+                                                                backgroundColor: 'rgba(74, 186, 120, 0.15)',
+                                                                border: '1px solid rgba(74, 186, 120, 0.4)',
+                                                                color: '#4ABA78',
+                                                                fontSize: '11px',
+                                                                fontWeight: '700',
+                                                                padding: '2px 6px',
+                                                                borderRadius: '4px'
+                                                            }}>
+                                                                Target: ₹{targetVal}
+                                                            </span>
+                                                        )}
+                                                        {slVal && (
+                                                            <span style={{
+                                                                backgroundColor: 'rgba(239, 83, 80, 0.15)',
+                                                                border: '1px solid rgba(239, 83, 80, 0.4)',
+                                                                color: '#EF5350',
+                                                                fontSize: '11px',
+                                                                fontWeight: '700',
+                                                                padding: '2px 6px',
+                                                                borderRadius: '4px'
+                                                            }}>
+                                                                SL: ₹{slVal}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
 
                                     {/* Row 4: Margin Info */}
                                     <div style={styles.apkActiveRow4}>
@@ -762,7 +802,10 @@ const styles = {
         flexDirection: 'column',
     },
     header: {
-        padding: '16px',
+        paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))',
+        paddingBottom: '16px',
+        paddingLeft: '16px',
+        paddingRight: '16px',
         backgroundColor: 'rgba(8, 10, 22, 0.55)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
@@ -810,7 +853,7 @@ const styles = {
     list: {
         display: 'flex',
         flexDirection: 'column',
-        padding: '0 16px',
+        padding: '12px 16px 0 16px',
     },
     emptyContainer: {
         display: 'flex',
@@ -1387,11 +1430,13 @@ const styles = {
         width: '100%',
     },
     exitTradeHeader: {
-        height: '56px',
+        height: 'calc(56px + env(safe-area-inset-top, 0px))',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 16px',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingLeft: '16px',
+        paddingRight: '16px',
         borderBottom: '1px solid rgba(255,255,255,0.1)',
         backgroundColor: 'rgba(8, 10, 22, 0.8)',
     },

@@ -587,7 +587,11 @@ const styles = {
     },
     header: {
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "15px 20px", backgroundColor: "transparent",
+        paddingTop: "calc(15px + env(safe-area-inset-top, 0px))",
+        paddingBottom: "15px",
+        paddingLeft: "20px",
+        paddingRight: "20px",
+        backgroundColor: "transparent",
         zIndex: 10,
     },
     headerTitleContainer: { display: "flex", alignItems: "center", gap: "10px" },

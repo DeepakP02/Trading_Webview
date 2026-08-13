@@ -116,6 +116,121 @@ const FlashingPriceBox = React.memo(({ value, baseStyle, defaultColor }) => {
     );
 });
 
+const WatchlistRow = React.memo(({
+    item,
+    bid,
+    ask,
+    change,
+    high,
+    low,
+    open,
+    onClick,
+    styles
+}) => {
+    return (
+        <tr style={styles.tr} onClick={onClick}>
+            <td style={styles.tdLeft}>
+                <div style={styles.tableSymbolName}>{formatSymbolName(item.name)}</div>
+                <div style={styles.tableSubText}>
+                    {item.expiry || item.date ? `${item.expiry || item.date} • ` : ''}
+                    Lot:{item.lotSize || item.lot_size || 1}
+                </div>
+            </td>
+            <td style={styles.tdRight}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <span style={{
+                        color: change >= 0 ? '#4CAF50' : '#EF5350',
+                        fontSize: '13px',
+                        fontWeight: 'bold'
+                    }}>
+                        Chg: {change.toFixed(2)}
+                    </span>
+                    <span style={styles.tableBoxLabel}>H: {Number(high || 0)}</span>
+                </div>
+            </td>
+            <td style={styles.tdCenter}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <FlashingPriceBox value={formatPrice(bid)} baseStyle={styles.tableBidBox} defaultColor="#2E7D32" />
+                    <span style={styles.tableBoxLabel}>L: {formatPrice(low || 0)}</span>
+                </div>
+            </td>
+            <td style={styles.tdCenter}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <FlashingPriceBox value={formatPrice(ask)} baseStyle={styles.tableAskBox} defaultColor="#C62828" />
+                    <span style={styles.tableBoxLabel}>O: {formatPrice(open || 0)}</span>
+                </div>
+            </td>
+        </tr>
+    );
+});
+
+const SearchRow = React.memo(({
+    item,
+    isPinned,
+    bid,
+    ask,
+    change,
+    high,
+    low,
+    open,
+    onToggle,
+    styles
+}) => {
+    return (
+        <tr 
+            style={{ 
+                ...styles.tr, 
+                ...(isPinned ? { backgroundColor: 'rgba(76, 175, 80, 0.04)' } : {}) 
+            }}
+            onClick={onToggle}
+        >
+            <td style={styles.tdLeft}>
+                <div style={styles.tableSymbolName}>{formatSymbolName(item.name)}</div>
+                <div style={styles.tableSubText}>
+                    {item.expiry || item.date ? `${item.expiry || item.date} • ` : ''}
+                    Lot:{item.lotSize || item.lot_size || 1}
+                </div>
+            </td>
+            <td style={styles.tdRight}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <span style={{ 
+                        color: change >= 0 ? '#4CAF50' : '#EF5350', 
+                        fontSize: '13px', 
+                        fontWeight: 'bold' 
+                    }}>
+                        Chg: {change.toFixed(2)}
+                    </span>
+                    <span style={styles.tableBoxLabel}>H: {Number(high || 0)}</span>
+                </div>
+            </td>
+            <td style={styles.tdCenter}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <FlashingPriceBox value={formatPrice(bid)} baseStyle={styles.tableBidBox} defaultColor="#2E7D32" />
+                    <span style={styles.tableBoxLabel}>L: {formatPrice(low || 0)}</span>
+                </div>
+            </td>
+            <td style={styles.tdCenter}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <FlashingPriceBox value={formatPrice(ask)} baseStyle={styles.tableAskBox} defaultColor="#C62828" />
+                    <span style={styles.tableBoxLabel}>O: {formatPrice(open || 0)}</span>
+                </div>
+            </td>
+            <td style={styles.tdCenter}>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <div style={{
+                        ...styles.checkbox,
+                        margin: 0,
+                        backgroundColor: isPinned ? '#4CAF50' : 'transparent',
+                        borderColor: isPinned ? '#4CAF50' : 'rgba(255,255,255,0.35)'
+                    }}>
+                        {isPinned && <Check size={11} color="#ffffff" strokeWidth={4} />}
+                    </div>
+                </div>
+            </td>
+        </tr>
+    );
+});
+
 export default function Dashboard() {
     const navigate = useNavigate();
     const { isMobile, isTablet } = useResponsive();
@@ -451,47 +566,45 @@ export default function Dashboard() {
                                     </button>
                                 </div>
                             ) : (
-                                <div style={styles.list}>
-                                    {filteredWatchlist.map(item => {
-                                        const normKey = normalizeSymbol(item.name);
-                                        const liveQuote = livePrices[normKey] || {};
-                                        const ltp = liveQuote.ltp || parseFloat(item.ltp) || 0;
-                                        const bid = liveQuote.bid || parseFloat(item.bid) || ltp;
-                                        const ask = liveQuote.ask || parseFloat(item.ask) || ltp;
-                                        const change = liveQuote.change !== undefined ? parseFloat(liveQuote.change) : (parseFloat(item.change) || 0);
+                                <div style={styles.tableContainer}>
+                                    <table style={styles.table}>
+                                        <thead>
+                                            <tr>
+                                                <th style={styles.thLeft}>Symbol</th>
+                                                <th style={styles.thChange}>Change</th>
+                                                <th style={styles.thBidAsk}>Bid</th>
+                                                <th style={styles.thBidAsk}>Ask</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredWatchlist.map(item => {
+                                                const normKey = normalizeSymbol(item.name);
+                                                const liveQuote = livePrices[normKey] || {};
+                                                const ltp = liveQuote.ltp || parseFloat(item.ltp) || 0;
+                                                const bid = liveQuote.bid || parseFloat(item.bid) || ltp;
+                                                const ask = liveQuote.ask || parseFloat(item.ask) || ltp;
+                                                const change = liveQuote.change !== undefined ? parseFloat(liveQuote.change) : (parseFloat(item.change) || 0);
+                                                const high = liveQuote.high || parseFloat(item.high) || 0;
+                                                const low = liveQuote.low || parseFloat(item.low) || 0;
+                                                const open = liveQuote.open || parseFloat(item.open) || 0;
 
-                                        return (
-                                            <div key={item.id} style={styles.card}
-                                                onClick={() => navigate(`/order/${encodeURIComponent(item.name)}`, { state: { item } })}>
-                                                <div style={styles.cardLeft}>
-                                                    <div style={styles.symbolName}>{formatSymbolName(item.name)}</div>
-                                                    {(item.expiry || item.date) && (
-                                                        <div style={styles.subInfoText}>
-                                                            {item.expiry || item.date}
-                                                        </div>
-                                                    )}
-                                                    <div style={styles.subInfoText}>
-                                                        Chg:{change.toFixed(2)} H:{Number(liveQuote.high || item.high || 0)}
-                                                    </div>
-                                                    {(item.lotSize || item.lot_size) && (
-                                                        <div style={styles.subInfoText}>
-                                                            Lot Size:{item.lotSize || item.lot_size}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div style={styles.cardRight}>
-                                                    <div style={styles.priceColumn}>
-                                                        <FlashingPriceBox value={formatPrice(bid)} baseStyle={styles.bidBox} defaultColor="#2E7D32" />
-                                                        <span style={styles.boxLabel}>L: {formatPrice(liveQuote.low || item.low || 0)}</span>
-                                                    </div>
-                                                    <div style={{ ...styles.priceColumn, marginLeft: '8px' }}>
-                                                        <FlashingPriceBox value={formatPrice(ask)} baseStyle={styles.askBox} defaultColor="#C62828" />
-                                                        <span style={styles.boxLabel}>O: {formatPrice(liveQuote.open || item.open || 0)}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                                return (
+                                                    <WatchlistRow
+                                                        key={item.id}
+                                                        item={item}
+                                                        bid={bid}
+                                                        ask={ask}
+                                                        change={change}
+                                                        high={high}
+                                                        low={low}
+                                                        open={open}
+                                                        onClick={() => navigate(`/order/${encodeURIComponent(item.name)}`, { state: { item } })}
+                                                        styles={styles}
+                                                    />
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
                                 </div>
                             )}
                         </main>
@@ -579,57 +692,48 @@ export default function Dashboard() {
                                     </p>
                                 </div>
                             ) : (
-                                <div style={styles.list}>
-                                    {displayList.map(item => {
-                                        const normKey = normalizeSymbol(item.name);
-                                        const liveQuote = livePrices[normKey] || {};
-                                        const ltp = liveQuote.ltp || parseFloat(item.ltp) || 0;
-                                        const bid = liveQuote.bid || parseFloat(item.bid) || ltp;
-                                        const ask = liveQuote.ask || parseFloat(item.ask) || ltp;
-                                        const change = liveQuote.change !== undefined ? parseFloat(liveQuote.change) : (parseFloat(item.change) || 0);
-                                        const isPinned = includedPins.has(item.name);
+                                <div style={styles.tableContainer}>
+                                    <table style={styles.table}>
+                                        <thead>
+                                            <tr>
+                                                <th style={styles.thLeft}>Symbol</th>
+                                                <th style={styles.thChange}>Change</th>
+                                                <th style={styles.thBidAsk}>Bid</th>
+                                                <th style={styles.thBidAsk}>Ask</th>
+                                                <th style={styles.thBidAsk}>Add</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {displayList.map(item => {
+                                                const normKey = normalizeSymbol(item.name);
+                                                const liveQuote = livePrices[normKey] || {};
+                                                const ltp = liveQuote.ltp || parseFloat(item.ltp) || 0;
+                                                const bid = liveQuote.bid || parseFloat(item.bid) || ltp;
+                                                const ask = liveQuote.ask || parseFloat(item.ask) || ltp;
+                                                const change = liveQuote.change !== undefined ? parseFloat(liveQuote.change) : (parseFloat(item.change) || 0);
+                                                const high = liveQuote.high || parseFloat(item.high) || 0;
+                                                const low = liveQuote.low || parseFloat(item.low) || 0;
+                                                const open = liveQuote.open || parseFloat(item.open) || 0;
+                                                const isPinned = includedPins.has(item.name);
 
-                                        return (
-                                            <div key={item.id} style={{ ...styles.card, ...(isPinned ? { backgroundColor: 'rgba(76,175,80,0.05)', borderColor: 'rgba(76,175,80,0.15)' } : {}) }}
-                                                onClick={() => toggleWatchlist(item)}>
-                                                <div style={styles.cardLeft}>
-                                                    <div style={styles.symbolName}>{formatSymbolName(item.name)}</div>
-                                                    {(item.expiry || item.date) && (
-                                                        <div style={styles.subInfoText}>
-                                                            {item.expiry || item.date}
-                                                        </div>
-                                                    )}
-                                                    <div style={styles.subInfoText}>
-                                                        Chg:{change.toFixed(2)} H:{Number(liveQuote.high || item.high || 0)}
-                                                    </div>
-                                                    {(item.lotSize || item.lot_size) && (
-                                                        <div style={styles.subInfoText}>
-                                                            Lot Size:{item.lotSize || item.lot_size}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div style={styles.cardRight}>
-                                                    <div style={styles.priceColumn}>
-                                                        <FlashingPriceBox value={formatPrice(bid)} baseStyle={styles.bidBox} defaultColor="#2E7D32" />
-                                                        <span style={styles.boxLabel}>L: {formatPrice(liveQuote.low || item.low || 0)}</span>
-                                                    </div>
-                                                    <div style={{ ...styles.priceColumn, marginLeft: '8px' }}>
-                                                        <FlashingPriceBox value={formatPrice(ask)} baseStyle={styles.askBox} defaultColor="#C62828" />
-                                                        <span style={styles.boxLabel}>O: {formatPrice(liveQuote.open || item.open || 0)}</span>
-                                                    </div>
-                                                    <div style={styles.checkboxContainer}>
-                                                        <div style={{
-                                                            ...styles.checkbox,
-                                                            backgroundColor: isPinned ? '#4CAF50' : 'transparent',
-                                                            borderColor: isPinned ? '#4CAF50' : 'rgba(255,255,255,0.35)'
-                                                        }}>
-                                                            {isPinned && <Check size={11} color="#ffffff" strokeWidth={4} />}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                                return (
+                                                    <SearchRow
+                                                        key={item.id}
+                                                        item={item}
+                                                        isPinned={isPinned}
+                                                        bid={bid}
+                                                        ask={ask}
+                                                        change={change}
+                                                        high={high}
+                                                        low={low}
+                                                        open={open}
+                                                        onToggle={() => toggleWatchlist(item)}
+                                                        styles={styles}
+                                                    />
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
                                 </div>
                             )}
                         </main>
@@ -917,7 +1021,10 @@ const styles = {
         flexDirection: 'column',
     },
     header: {
-        padding: '12px 16px 0 16px',
+        paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))',
+        paddingBottom: '0',
+        paddingLeft: '16px',
+        paddingRight: '16px',
         backgroundColor: 'rgba(8, 10, 22, 0.55)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
@@ -1139,6 +1246,105 @@ const styles = {
         cursor: 'pointer',
         boxShadow: '0 4px 12px rgba(33, 150, 243, 0.3)',
         transition: 'transform 0.15s, opacity 0.15s',
+    },
+    tableContainer: {
+        width: '100%',
+        overflowX: 'auto',
+        backgroundColor: 'rgba(8, 10, 22, 0.4)',
+        borderRadius: '12px',
+        border: '1px solid var(--border-color)',
+        padding: '0 8px',
+        boxSizing: 'border-box',
+    },
+    table: {
+        width: '100%',
+        borderCollapse: 'collapse',
+        color: '#ffffff',
+    },
+    thChange: {
+        padding: '12px 8px',
+        fontSize: '11px',
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+        color: '#9CA3AF',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+        textAlign: 'right',
+    },
+    thBidAsk: {
+        padding: '12px 8px',
+        fontSize: '11px',
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+        color: '#9CA3AF',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+        textAlign: 'center',
+    },
+    thLeft: {
+        padding: '12px 8px',
+        fontSize: '11px',
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+        color: '#9CA3AF',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+        textAlign: 'left',
+    },
+    tr: {
+        borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+        cursor: 'pointer',
+        transition: 'background-color 0.15s',
+    },
+    tdLeft: {
+        padding: '12px 8px',
+        textAlign: 'left',
+        verticalAlign: 'middle',
+    },
+    tdRight: {
+        padding: '12px 8px',
+        textAlign: 'right',
+        verticalAlign: 'middle',
+    },
+    tdCenter: {
+        padding: '12px 8px',
+        textAlign: 'center',
+        verticalAlign: 'middle',
+    },
+    tableSymbolName: {
+        fontSize: '14px',
+        fontWeight: 'bold',
+        color: '#ffffff',
+    },
+    tableSubText: {
+        fontSize: '11px',
+        color: '#9CA3AF',
+        marginTop: '2px',
+    },
+    tableBidBox: {
+        backgroundColor: '#1b4332',
+        color: '#52b788',
+        padding: '6px 8px',
+        borderRadius: '6px',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        display: 'inline-block',
+        minWidth: '76px',
+        textAlign: 'center',
+    },
+    tableAskBox: {
+        backgroundColor: '#4c1e1e',
+        color: '#f87171',
+        padding: '6px 8px',
+        borderRadius: '6px',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        display: 'inline-block',
+        minWidth: '76px',
+        textAlign: 'center',
+    },
+    tableBoxLabel: {
+        fontSize: '10px',
+        color: '#9CA3AF',
+        marginTop: '3px',
+        fontWeight: 'bold',
     },
     list: {
         display: 'grid',

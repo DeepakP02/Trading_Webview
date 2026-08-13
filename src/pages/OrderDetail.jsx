@@ -398,7 +398,8 @@ const styles = {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingVertical: '10px',
+        paddingTop: 'calc(10px + env(safe-area-inset-top, 0px))',
+        paddingBottom: '10px',
     },
     headerTitleCol: {
         flex: 1,

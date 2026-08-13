@@ -1615,8 +1615,10 @@ const styles = {
     subContainer: {
         backgroundColor: 'transparent',
         minHeight: '100%',
-        padding: '16px',
+        paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))',
         paddingBottom: '90px',
+        paddingLeft: '16px',
+        paddingRight: '16px',
     },
     modalOverlay: {
         position: 'fixed',
@@ -1634,7 +1636,10 @@ const styles = {
         padding: '16px',
     },
     header: {
-        padding: '16px',
+        paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))',
+        paddingBottom: '16px',
+        paddingLeft: '16px',
+        paddingRight: '16px',
         backgroundColor: 'rgba(8, 10, 22, 0.55)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',

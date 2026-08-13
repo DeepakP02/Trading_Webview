@@ -587,7 +587,10 @@ export const TradeProvider = ({ children }) => {
             margin_used: Number(t.margin_used) || 0,
             pnl: Number(t.pnl) || 0,
             stop_loss: t.stop_loss || null,
+            stopLoss: t.stop_loss || null,
+            sl: t.stop_loss || null,
             target: t.target_price || null,
+            target_price: t.target_price || null,
             brokerage: Number(t.brokerage) || 0,
             time: t.entry_time ? new Date(t.entry_time).toLocaleString('en-IN') : '',
             exitTime: t.exit_time ? new Date(t.exit_time).toLocaleString('en-IN') : null,
@@ -852,7 +855,7 @@ export const TradeProvider = ({ children }) => {
     const setTargetSL = async (id, target, sl) => {
         try {
             await api.setTargetSL(id, target, sl);
-            setTrades(prev => prev.map(t => t.id === id ? { ...t, target, sl } : t));
+            setTrades(prev => prev.map(t => t.id === id ? { ...t, target, target_price: target, sl, stop_loss: sl, stopLoss: sl } : t));
             return { success: true };
         } catch (err) {
             throw err;

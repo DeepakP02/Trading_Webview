@@ -403,12 +403,16 @@ const styles = {
         flexDirection: 'column',
     },
     header: {
-        padding: '16px',
+        paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))',
+        paddingBottom: '16px',
+        paddingLeft: '16px',
+        paddingRight: '16px',
         backgroundColor: 'rgba(8, 10, 22, 0.55)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         borderBottom: '1px solid rgba(255,255,255,0.08)',
         textAlign: 'center',
+        marginBottom: '12px',
     },
     headerTitle: {
         fontSize: '18px',
@@ -580,7 +584,8 @@ const styles = {
     },
     pricesInfoRow: {
         display: 'flex',
-        gap: '24px',
+        flexDirection: 'column',
+        gap: '4px',
     },
     priceCol: {
         display: 'flex',
@@ -600,6 +605,7 @@ const styles = {
     cardDivider: {
         height: '1px',
         backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        margin: '12px 0',
     },
     positionFooterRow: {
         display: 'flex',
