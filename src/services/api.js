@@ -54,6 +54,25 @@ const getHeaders = async () => {
     };
 };
 
+const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const response = await fetch(url, { ...options, signal: controller.signal });
+        clearTimeout(timer);
+        return response;
+    } catch (err) {
+        clearTimeout(timer);
+        if (err.name === 'AbortError') {
+            throw new Error(`Connection timeout (${timeoutMs / 1000}s). Please verify your local backend server is running.`);
+        }
+        if (err.message && err.message.toLowerCase().includes('failed to fetch')) {
+            throw new Error(`Unable to connect to backend server (${BASE_URL}). Check if local backend is running.`);
+        }
+        throw err;
+    }
+};
+
 const handleResponse = async (response) => {
     if (response.status === 401) {
         console.warn('⚠️ Session expired (status 401). Clearing session.');
@@ -75,7 +94,7 @@ const handleResponse = async (response) => {
 };
 
 export const login = async (username, password, extraInfo = {}) => {
-    const res = await fetch(`${BASE_URL}/auth/login`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password, ...extraInfo }),
@@ -86,7 +105,7 @@ export const login = async (username, password, extraInfo = {}) => {
 };
 
 export const getMe = async () => {
-    const res = await fetch(`${BASE_URL}/auth/me`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/auth/me`, {
         headers: await getHeaders(),
     });
     const data = await handleResponse(res);
@@ -95,14 +114,14 @@ export const getMe = async () => {
 };
 
 export const getTrades = async (status) => {
-    const res = await fetch(`${BASE_URL}/trades?status=${status || ''}`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/trades?status=${status || ''}`, {
         headers: await getHeaders(),
     });
     return handleResponse(res);
 };
 
 export const placeOrder = async (orderData) => {
-    const res = await fetch(`${BASE_URL}/trades`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/trades`, {
         method: 'POST',
         headers: await getHeaders(),
         body: JSON.stringify(orderData),

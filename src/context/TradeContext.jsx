@@ -102,6 +102,49 @@ export const normalizeSymbol = (symbol) => {
         .toUpperCase();
 };
 
+export const getLivePriceObject = (symbolName, livePrices) => {
+    if (!symbolName || !livePrices) return null;
+    const raw = String(symbolName).trim();
+    const upper = raw.toUpperCase();
+    const clean = upper.includes(':') ? upper.split(':')[1] : upper;
+    const norm = normalizeSymbol(raw);
+
+    const possibleKeys = [
+        norm,
+        upper,
+        clean,
+        raw,
+        `NFO:${clean}`,
+        `MCX:${clean}`,
+        `NSE:${clean}`,
+        clean.replace(/\s+/g, ''),
+        clean.replace(/\s+/g, '') + 'FUT',
+        upper.replace(/\s+/g, ''),
+        raw.toLowerCase(),
+        norm.toLowerCase()
+    ];
+
+    for (const k of possibleKeys) {
+        if (livePrices[k] && (parseFloat(livePrices[k].ltp) > 0 || parseFloat(livePrices[k].bid) > 0 || parseFloat(livePrices[k].ask) > 0)) {
+            return livePrices[k];
+        }
+    }
+
+    const liveKeys = Object.keys(livePrices);
+    const noSpaceClean = clean.replace(/[\s\-_]/g, '');
+    for (const k of liveKeys) {
+        const noSpaceK = k.toUpperCase().replace(/^.*:/, '').replace(/[\s\-_]/g, '');
+        if (noSpaceK === noSpaceClean || (noSpaceClean.length > 3 && (noSpaceK.includes(noSpaceClean) || noSpaceClean.includes(noSpaceK)))) {
+            const data = livePrices[k];
+            if (data && (parseFloat(data.ltp) > 0 || parseFloat(data.bid) > 0 || parseFloat(data.ask) > 0)) {
+                return data;
+            }
+        }
+    }
+
+    return null;
+};
+
 export const TradeProvider = ({ children }) => {
     const [trades, setTrades] = useState(() => {
         try {
@@ -839,7 +882,6 @@ export const TradeProvider = ({ children }) => {
                             api.closeTrade(id, parseFloat(exitPrice), pnl ? parseFloat(pnl) : null).catch(() => {})
                         ));
                     }
-                    await new Promise(r => setTimeout(r, 800));
                     await Promise.all([refreshTrades(), refreshBalance()]);
                 } catch (bgErr) {
                     console.error('Background sync close error:', bgErr);
@@ -1187,11 +1229,11 @@ export const TradeProvider = ({ children }) => {
             }
             positions[key].totalHoldingMargin += tradeHoldingMargin;
 
-            const normKey = normalizeSymbol(trade.name);
-            const liveData = livePrices[normKey] || {};
-            const ltp = liveData.ltp || Number(trade.entryPrice) || 0;
-            const bid = liveData.bid || ltp;
-            const ask = liveData.ask || ltp;
+            const liveData = getLivePriceObject(trade.name, livePrices) || getLivePriceObject(trade.displayName, livePrices) || {};
+            const liveLtp = parseFloat(liveData.ltp || 0);
+            const ltp = liveLtp > 0 ? liveLtp : (Number(trade.entryPrice) || 0);
+            const bid = (liveData && parseFloat(liveData.bid) > 0) ? parseFloat(liveData.bid) : ltp;
+            const ask = (liveData && parseFloat(liveData.ask) > 0) ? parseFloat(liveData.ask) : ltp;
 
             const exitPrice = trade.type === 'BUY' ? bid : ask;
             let tradePL = 0;
@@ -1220,11 +1262,11 @@ export const TradeProvider = ({ children }) => {
         });
 
         return Object.values(positions).map(pos => {
-            const normKey = normalizeSymbol(pos.name);
-            const liveData = livePrices[normKey] || { ltp: 0, bid: 0, ask: 0 };
-            const ltp = liveData.ltp || pos.avgPrice || 0;
-            const bid = liveData.bid || ltp;
-            const ask = liveData.ask || ltp;
+            const liveData = getLivePriceObject(pos.name, livePrices) || getLivePriceObject(pos.displayName, livePrices) || {};
+            const liveLtp = parseFloat(liveData.ltp || 0);
+            const ltp = liveLtp > 0 ? liveLtp : (pos.avgPrice || 0);
+            const bid = (liveData && parseFloat(liveData.bid) > 0) ? parseFloat(liveData.bid) : ltp;
+            const ask = (liveData && parseFloat(liveData.ask) > 0) ? parseFloat(liveData.ask) : ltp;
 
             const netQty = pos.netQty;
             const qty = Math.abs(netQty);
@@ -1826,9 +1868,15 @@ export const TradeProvider = ({ children }) => {
     }, [kiteMarketData, indices]);
 
     const toggleWatchlist = async (item) => {
+        const symName = typeof item === 'string' ? item : (item?.name || item?.fullSymbol || item?.symbol);
+        if (!symName) return;
+
         const next = new Set(includedPins);
-        if (next.has(item.name)) next.delete(item.name);
-        else next.add(item.name);
+        if (next.has(symName)) {
+            next.delete(symName); // Remove from watchlist (exact match)
+        } else {
+            next.add(symName); // Add to watchlist
+        }
         setIncludedPins(next);
 
         try {
@@ -1838,7 +1886,10 @@ export const TradeProvider = ({ children }) => {
         }
     };
 
-    const isPinned = (name) => includedPins.has(name);
+    const isPinned = (name) => {
+        if (!name || !includedPins || includedPins.size === 0) return false;
+        return includedPins.has(name);
+    };
 
     const addUserAlert = async (alert) => {
         try {

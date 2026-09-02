@@ -239,6 +239,7 @@ export default function Dashboard() {
         globalSearchData,
         livePrices,
         includedPins,
+        isPinned,
         toggleWatchlist,
         unreadAdminCount,
         adminNotifications,
@@ -431,11 +432,15 @@ export default function Dashboard() {
         return items;
     }, [globalSearchData, searchTab, searchQuery]);
 
+    const allWatchlistItems = useMemo(() => {
+        return globalSearchData && globalSearchData.length > 0 ? globalSearchData : (watchlist || []);
+    }, [globalSearchData, watchlist]);
+
     // ── Watchlist view data (pinned items only, per category) ──
     const filteredWatchlist = useMemo(() => {
-        let items = (globalSearchData.length > 0 ? globalSearchData : watchlist).filter(item => {
+        let items = allWatchlistItems.filter(item => {
             const matchesCat = getItemTab(item) === selectedCategory;
-            const isIncluded = includedPins.has(item.name);
+            const isIncluded = isPinned(item.name);
             return matchesCat && isIncluded;
         });
 
@@ -459,19 +464,18 @@ export default function Dashboard() {
             });
         }
         return [...items].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    }, [globalSearchData, watchlist, selectedCategory, sortBy, includedPins, livePrices]);
+    }, [allWatchlistItems, selectedCategory, sortBy, isPinned, livePrices]);
 
     // Watchlist pinned counts per category (for Dashboard tabs)
     const watchlistCounts = useMemo(() => {
-        const allItems = globalSearchData.length > 0 ? globalSearchData : watchlist;
         const c = {};
         CATEGORIES.forEach(cat => {
-            c[cat] = allItems.filter(item =>
-                getItemTab(item) === cat && includedPins.has(item.name)
+            c[cat] = allWatchlistItems.filter(item =>
+                getItemTab(item) === cat && isPinned(item.name)
             ).length;
         });
         return c;
-    }, [globalSearchData, watchlist, includedPins]);
+    }, [allWatchlistItems, isPinned]);
 
     return (
         <div style={{ ...styles.container, paddingBottom: '90px' }}>

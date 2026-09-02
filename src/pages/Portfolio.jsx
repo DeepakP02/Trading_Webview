@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTrades, normalizeSymbol } from '../context/TradeContext';
+import { useTrades, normalizeSymbol, getLivePriceObject } from '../context/TradeContext';
 import { formatPrice } from '../utils/formatPrice';
 import { X, ChevronLeft, RefreshCw } from 'lucide-react';
 import useResponsive from '../hooks/useResponsive';
+import TradeWarningPopup from '../components/TradeWarningPopup';
+import { checkHoldTimeAllowed } from '../utils/holdTimeUtils';
 
 const formatSymbolName = (name) => {
     if (!name) return '';
@@ -21,26 +23,18 @@ const formatSymbolName = (name) => {
 };
 
 export default function Portfolio() {
+    const { aggregatedPositions, livePrices, closeTrade, userConfig, fetchInitialData, activePL, totalDynamicMargin, dynamicMarginBySegment, totalM2M, ledgerBalance, marginAvailable, getInstrumentMeta } = useTrades();
     const navigate = useNavigate();
     const { isMobile } = useResponsive();
-    const {
-        livePrices,
-        activePL,
-        totalDynamicMargin,
-        dynamicMarginBySegment,
-        totalM2M,
-        ledgerBalance,
-        marginAvailable,
-        fetchInitialData,
-        getInstrumentMeta,
-        aggregatedPositions,
-        closeTrade
-    } = useTrades();
 
     const [selectedTrade, setSelectedTrade] = useState(null);
     const [showCloseModal, setShowCloseModal] = useState(false);
     const [loading, setLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
+
+    // Anti-scalping / Hold Time Warning
+    const [warningVisible, setWarningVisible] = useState(false);
+    const [warningMessage, setWarningMessage] = useState('');
 
     useEffect(() => {
         fetchInitialData();
@@ -50,12 +44,25 @@ export default function Portfolio() {
         if (!selectedTrade) return;
         setLoading(true);
         setErrorMessage('');
-        
-        const normKey = normalizeSymbol(selectedTrade.name);
-        const liveQuote = livePrices[normKey] || {};
-        const ltp = liveQuote.ltp || parseFloat(selectedTrade.exitPrice) || parseFloat(selectedTrade.avgPrice) || 0;
-        const bid = liveQuote.bid || ltp;
-        const ask = liveQuote.ask || ltp;
+
+        // --- Anti-scalping: Minimum Hold Time Check ---
+        // For aggregated positions, check the oldest underlying trade (FIFO)
+        const tradeToCheck = selectedTrade.oldestTrade || selectedTrade;
+        const holdCheck = checkHoldTimeAllowed(tradeToCheck, userConfig);
+        if (!holdCheck.allowed) {
+            setWarningMessage(
+                `Minimum hold time is ${holdCheck.minTime} seconds. Please wait ${holdCheck.remaining} more second(s).`
+            );
+            setWarningVisible(true);
+            setLoading(false);
+            return;
+        }
+        // --- End Hold Time Check ---
+
+        const liveQuote = getLivePriceObject(selectedTrade.name, livePrices) || getLivePriceObject(selectedTrade.displayName, livePrices) || {};
+        const ltp = parseFloat(liveQuote.ltp) || parseFloat(selectedTrade.exitPrice) || parseFloat(selectedTrade.avgPrice) || 0;
+        const bid = parseFloat(liveQuote.bid) || ltp;
+        const ask = parseFloat(liveQuote.ask) || ltp;
         const exitPrice = selectedTrade.type === 'BUY' ? bid : ask;
 
         try {
@@ -63,16 +70,27 @@ export default function Portfolio() {
             setShowCloseModal(false);
             setSelectedTrade(null);
         } catch (err) {
-            setErrorMessage(err.message || 'Failed to close position.');
+            // Special handling for scalping/hold-time backend errors
+            const isScalpingError = err.message && (
+                err.message.toLowerCase().includes('scalping') ||
+                err.message.toLowerCase().includes('hold time') ||
+                err.message.toLowerCase().includes('minimum hold time') ||
+                err.message.toLowerCase().includes('hold duration')
+            );
+            if (isScalpingError) {
+                setWarningMessage(err.message);
+                setWarningVisible(true);
+            } else {
+                setErrorMessage(err.message || 'Failed to close position.');
+            }
         } finally {
             setLoading(false);
         }
     };
 
     if (showCloseModal && selectedTrade) {
-        const normKey = normalizeSymbol(selectedTrade.name);
-        const liveData = livePrices[normKey] || {};
-        const ltp = liveData.ltp || parseFloat(selectedTrade.exitPrice) || parseFloat(selectedTrade.avgPrice) || 0;
+        const liveData = getLivePriceObject(selectedTrade.name, livePrices) || getLivePriceObject(selectedTrade.displayName, livePrices) || {};
+        const ltp = parseFloat(liveData.ltp) || parseFloat(selectedTrade.exitPrice) || parseFloat(selectedTrade.avgPrice) || 0;
         
         const bidVal = liveData.bid && parseFloat(liveData.bid) !== 0 ? parseFloat(liveData.bid) : ltp * 0.9995;
         const askVal = liveData.ask && parseFloat(liveData.ask) !== 0 ? parseFloat(liveData.ask) : ltp * 1.0005;
@@ -118,6 +136,13 @@ export default function Portfolio() {
 
         return (
             <div style={styles.exitTradeOverlay}>
+                {/* Anti-scalping Warning Popup */}
+                <TradeWarningPopup
+                    visible={warningVisible}
+                    title="Action Restricted"
+                    message={warningMessage}
+                    onConfirm={() => setWarningVisible(false)}
+                />
                 <header style={styles.exitTradeHeader}>
                     <button onClick={() => setShowCloseModal(false)} style={styles.exitTradeBackBtn}>
                         <ChevronLeft size={26} />
@@ -231,6 +256,13 @@ export default function Portfolio() {
 
     return (
         <div style={{ ...styles.container, paddingBottom: '90px' }}>
+            {/* Anti-scalping Warning Popup */}
+            <TradeWarningPopup
+                visible={warningVisible}
+                title="Action Restricted"
+                message={warningMessage}
+                onConfirm={() => setWarningVisible(false)}
+            />
             <div style={styles.contentWrapper}>
                 <header style={styles.header}>
                     <h2 style={styles.headerTitle}>PORTFOLIO</h2>
@@ -339,7 +371,7 @@ export default function Portfolio() {
                                     </div>
                                     <div style={styles.priceCol}>
                                         <span style={styles.priceLabel}>CMP</span>
-                                        <span style={styles.priceVal}>{pos.ltp.toFixed(2)}</span>
+                                        <span style={styles.priceVal}>{(pos.ltp && pos.ltp > 0 ? pos.ltp : (pos.avgPrice || 0)).toFixed(2)}</span>
                                     </div>
                                 </div>
 

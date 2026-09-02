@@ -4,6 +4,8 @@ import { formatPrice } from '../utils/formatPrice';
 import { Edit2, X, AlertTriangle, ChevronLeft, RefreshCw } from 'lucide-react';
 import * as api from '../services/api';
 import useResponsive from '../hooks/useResponsive';
+import TradeWarningPopup from '../components/TradeWarningPopup';
+import { checkHoldTimeAllowed, isSameInstrument, detectSegment, getMinHoldTimeSeconds, getSecondsHeld } from '../utils/holdTimeUtils';
 
 const formatSymbolName = (name) => {
     if (!name) return '';
@@ -69,7 +71,8 @@ export default function Trades() {
         setTargetSL,
         fetchInitialData,
         refreshTrades,
-        getInstrumentMeta
+        getInstrumentMeta,
+        userConfig,
     } = useTrades();
 
     const [activeTab, setActiveTab] = useState(() => {
@@ -95,6 +98,10 @@ export default function Trades() {
 
     const [loading, setLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
+
+    // Anti-scalping / Hold Time Warning
+    const [warningVisible, setWarningVisible] = useState(false);
+    const [warningMessage, setWarningMessage] = useState('');
 
     useEffect(() => {
         fetchInitialData();
@@ -124,7 +131,19 @@ export default function Trades() {
         if (!selectedTrade) return;
         setLoading(true);
         setErrorMessage('');
-        
+
+        // --- Anti-scalping: Minimum Hold Time Check ---
+        const holdCheck = checkHoldTimeAllowed(selectedTrade, userConfig);
+        if (!holdCheck.allowed) {
+            setWarningMessage(
+                `Minimum hold time is ${holdCheck.minTime} seconds. Please wait ${holdCheck.remaining} more second(s).`
+            );
+            setWarningVisible(true);
+            setLoading(false);
+            return;
+        }
+        // --- End Hold Time Check ---
+
         const normKey = normalizeSymbol(selectedTrade.name);
         const liveQuote = livePrices[normKey] || {};
         const ltp = liveQuote.ltp || parseFloat(selectedTrade.exitPrice) || 0;
@@ -137,7 +156,19 @@ export default function Trades() {
             setShowCloseModal(false);
             setSelectedTrade(null);
         } catch (err) {
-            setErrorMessage(err.message || 'Failed to close position.');
+            // Special handling for scalping/hold-time backend errors
+            const isScalpingError = err.message && (
+                err.message.toLowerCase().includes('scalping') ||
+                err.message.toLowerCase().includes('hold time') ||
+                err.message.toLowerCase().includes('minimum hold time') ||
+                err.message.toLowerCase().includes('hold duration')
+            );
+            if (isScalpingError) {
+                setWarningMessage(err.message);
+                setWarningVisible(true);
+            } else {
+                setErrorMessage(err.message || 'Failed to close position.');
+            }
         } finally {
             setLoading(false);
         }
@@ -188,6 +219,16 @@ export default function Trades() {
     };
 
     const handleOpenTargetSlModal = (trade) => {
+        if (userConfig) {
+            const holdCheck = checkHoldTimeAllowed(trade, userConfig);
+            if (!holdCheck.allowed) {
+                setWarningMessage(
+                    `Minimum hold time is ${holdCheck.minTime} seconds. Please wait ${holdCheck.remaining} more second(s) before setting Target & Stop Loss.`
+                );
+                setWarningVisible(true);
+                return;
+            }
+        }
         setSelectedTrade(trade);
         setTargetPrice(trade.target || trade.target_price ? String(trade.target || trade.target_price) : '');
         setStopLoss(trade.stop_loss || trade.stopLoss || trade.sl ? String(trade.stop_loss || trade.stopLoss || trade.sl) : '');
@@ -197,6 +238,16 @@ export default function Trades() {
 
     const handleTargetSlConfirm = async () => {
         if (!selectedTrade) return;
+        if (userConfig) {
+            const holdCheck = checkHoldTimeAllowed(selectedTrade, userConfig);
+            if (!holdCheck.allowed) {
+                setWarningMessage(
+                    `Minimum hold time is ${holdCheck.minTime} seconds. Please wait ${holdCheck.remaining} more second(s) before setting Target & Stop Loss.`
+                );
+                setWarningVisible(true);
+                return;
+            }
+        }
         setLoading(true);
         setErrorMessage('');
         try {
@@ -247,6 +298,13 @@ export default function Trades() {
 
         return (
             <div style={styles.exitTradeOverlay}>
+                {/* Anti-scalping Warning Popup */}
+                <TradeWarningPopup
+                    visible={warningVisible}
+                    title="Action Restricted"
+                    message={warningMessage}
+                    onConfirm={() => setWarningVisible(false)}
+                />
                 <header style={styles.exitTradeHeader}>
                     <button onClick={() => setShowCloseModal(false)} style={styles.exitTradeBackBtn}>
                         <ChevronLeft size={26} />
@@ -360,6 +418,13 @@ export default function Trades() {
 
     return (
         <div style={{ ...styles.container, paddingBottom: '90px' }}>
+            {/* Anti-scalping Warning Popup */}
+            <TradeWarningPopup
+                visible={warningVisible}
+                title="Action Restricted"
+                message={warningMessage}
+                onConfirm={() => setWarningVisible(false)}
+            />
             <div style={styles.contentWrapper}>
                 {/* Header centered "TRADES" */}
             <header style={styles.header}>

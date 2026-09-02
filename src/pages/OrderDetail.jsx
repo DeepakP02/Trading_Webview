@@ -5,6 +5,8 @@ import { formatPrice } from '../utils/formatPrice';
 import { X, Lock, Check } from 'lucide-react';
 import * as api from '../services/api';
 import useResponsive from '../hooks/useResponsive';
+import TradeWarningPopup from '../components/TradeWarningPopup';
+import { isSameInstrument, checkHoldTimeAllowed, detectSegment, getMinHoldTimeSeconds, getSecondsHeld } from '../utils/holdTimeUtils';
 
 const formatSymbolName = (name) => {
     if (!name) return '';
@@ -27,7 +29,7 @@ export default function OrderDetail() {
     const { isMobile } = useResponsive();
     const location = useLocation();
     
-    const { addTrade, addNotification, livePrices, watchlist, userConfig } = useTrades();
+    const { addTrade, addNotification, livePrices, watchlist, userConfig, trades } = useTrades();
 
     // Retrieve state item fallback
     const passedItem = location.state?.item || {};
@@ -70,9 +72,14 @@ export default function OrderDetail() {
     const [showPlainPassword, setShowPlainPassword] = useState(false);
     
     const [placing, setPlacing] = useState(false);
+    const [placingType, setPlacingType] = useState(null);
     const [modalVisible, setModalVisible] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
     const [isError, setIsError] = useState(false);
+
+    // Anti-scalping / Hold Time Warning
+    const [warningVisible, setWarningVisible] = useState(false);
+    const [warningMessage, setWarningMessage] = useState('');
 
     // Sync input price with live LTP when switching tabs to Market
     useEffect(() => {
@@ -99,19 +106,76 @@ export default function OrderDetail() {
         }
 
         setPlacing(true);
+        setPlacingType(type);
         setIsError(false);
 
-        const isMarket = activeTab === 'Market';
-        const finalPrice = type === 'SELL' ? sellPrice : buyPrice;
-
-        let instrumentType = '';
-        if (isNFO) {
-            instrumentType = name.toUpperCase().endsWith('CE') || name.toUpperCase().endsWith('PE') ? 'OPT' : 'FUT';
-        } else if (isNSE) {
-            instrumentType = 'EQ';
-        }
-
         try {
+            // --- Anti-scalping Hold Time Check ---
+            if (trades && Array.isArray(trades) && trades.length > 0 && userConfig) {
+                const targetSym = (liveItem.fullSymbol || name || '').toUpperCase();
+                const isMarketOrder = activeTab === 'Market';
+                const oppositeType = type === 'BUY' ? 'SELL' : 'BUY';
+
+                // 1. Opposite Direction Trade Check (Position Close / Netting)
+                const openOppositeTrades = trades.filter(t => {
+                    if (t.isCompleted || t.status === 'CLOSED' || t.status === 'DELETED' || t.isPending) return false;
+                    if ((t.type || '').toUpperCase() !== oppositeType) return false;
+                    const tSym = (t.name || t.fullSymbol || t.symbol || '').toUpperCase();
+                    return isSameInstrument(tSym, targetSym);
+                });
+
+                if (openOppositeTrades.length > 0) {
+                    const segment = detectSegment(targetSym, liveItem.exchange || '');
+                    const minTimeSeconds = getMinHoldTimeSeconds(segment, userConfig);
+
+                    if (minTimeSeconds > 0) {
+                        for (const openTrade of openOppositeTrades) {
+                            const holdCheck = checkHoldTimeAllowed(openTrade, userConfig);
+                            if (!holdCheck.allowed) {
+                                setWarningMessage(
+                                    `Minimum hold time is ${holdCheck.minTime} seconds. Please wait ${holdCheck.remaining} more second(s) before closing your position.`
+                                );
+                                setWarningVisible(true);
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                // 2. Limit Order Check on active scrip
+                if (!isMarketOrder) {
+                    const activeSameTrades = trades.filter(t => {
+                        if (t.isCompleted || t.status === 'CLOSED' || t.status === 'DELETED' || t.isPending) return false;
+                        const tSym = (t.name || t.fullSymbol || t.symbol || '').toUpperCase();
+                        return isSameInstrument(tSym, targetSym);
+                    });
+
+                    if (activeSameTrades.length > 0) {
+                        for (const openTrade of activeSameTrades) {
+                            const holdCheck = checkHoldTimeAllowed(openTrade, userConfig);
+                            if (!holdCheck.allowed) {
+                                setWarningMessage(
+                                    `Limit orders are blocked for ${name} during the active hold duration. Please wait ${holdCheck.remaining} more second(s).`
+                                );
+                                setWarningVisible(true);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+            // --- End Hold Time Check ---
+
+            const isMarket = activeTab === 'Market';
+            const finalPrice = type === 'SELL' ? sellPrice : buyPrice;
+
+            let instrumentType = '';
+            if (isNFO) {
+                instrumentType = name.toUpperCase().endsWith('CE') || name.toUpperCase().endsWith('PE') ? 'OPT' : 'FUT';
+            } else if (isNSE) {
+                instrumentType = 'EQ';
+            }
+
             await addTrade({
                 name: liveItem.fullSymbol || name,
                 type: type,
@@ -138,11 +202,24 @@ export default function OrderDetail() {
             setIsError(false);
             setModalVisible(true);
         } catch (err) {
-            setModalMessage(err.message || 'Order failed');
-            setIsError(true);
-            setModalVisible(true);
+            // Special handling for scalping/hold-time backend errors
+            const isScalpingError = err.message && (
+                err.message.toLowerCase().includes('scalping') ||
+                err.message.toLowerCase().includes('hold time') ||
+                err.message.toLowerCase().includes('minimum hold time') ||
+                err.message.toLowerCase().includes('hold duration')
+            );
+            if (isScalpingError) {
+                setWarningMessage(err.message);
+                setWarningVisible(true);
+            } else {
+                setModalMessage(err.message || 'Order failed');
+                setIsError(true);
+                setModalVisible(true);
+            }
         } finally {
             setPlacing(false);
+            setPlacingType(null);
         }
     };
 
@@ -155,6 +232,13 @@ export default function OrderDetail() {
 
     return (
         <div style={styles.container}>
+            {/* Anti-scalping Warning Popup */}
+            <TradeWarningPopup
+                visible={warningVisible}
+                title="Action Restricted"
+                message={warningMessage}
+                onConfirm={() => setWarningVisible(false)}
+            />
             <div style={styles.contentWrapper}>
                 {/* Header */}
                 <header style={styles.header}>
@@ -287,7 +371,7 @@ export default function OrderDetail() {
                             disabled={placing}
                             style={{ ...styles.marketPriceBtn, ...styles.sellBtn, ...(placing ? styles.btnDisabled : {}) }}
                         >
-                            {placing ? (
+                            {placing && placingType === 'SELL' ? (
                                 <span style={{ color: 'white' }}>Placing...</span>
                             ) : activeTab === 'Order' ? (
                                 <span style={{ fontSize: '15px', fontWeight: '800' }}>Place Sell Order</span>
@@ -303,7 +387,7 @@ export default function OrderDetail() {
                             disabled={placing}
                             style={{ ...styles.marketPriceBtn, ...styles.buyBtn, ...(placing ? styles.btnDisabled : {}) }}
                         >
-                            {placing ? (
+                            {placing && placingType === 'BUY' ? (
                                 <span style={{ color: 'white' }}>Placing...</span>
                             ) : activeTab === 'Order' ? (
                                 <span style={{ fontSize: '15px', fontWeight: '800' }}>Place Buy Order</span>

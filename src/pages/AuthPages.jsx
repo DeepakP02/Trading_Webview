@@ -26,7 +26,7 @@ export function Login() {
         setLoading(true);
         setError('');
         try {
-            await api.login(username, password);
+            await api.login(username, password, { deviceInfo: 'Mobile App WebView' });
             window.location.hash = '#/';
             window.location.reload();
         } catch (err) {
@@ -397,12 +397,12 @@ const styles = {
         objectFit: 'contain',
     },
     appName: {
-        fontSize: '28px',
+        fontSize: '34px',
         fontWeight: 'bold',
         color: '#ffffff',
-        letterSpacing: '2px',
-        textTransform: 'uppercase',
-        margin: 0,
+        letterSpacing: '0.8px',
+        margin: '8px 0 0 0',
+        textAlign: 'center',
     },
     form: {
         width: '100%',
