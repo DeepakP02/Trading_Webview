@@ -130,7 +130,23 @@ const WatchlistRow = React.memo(({
     return (
         <tr style={styles.tr} onClick={onClick}>
             <td style={styles.tdLeft}>
-                <div style={styles.tableSymbolName}>{formatSymbolName(item.name)}</div>
+                <div style={styles.tableSymbolName}>
+                    {formatSymbolName(item.name)}
+                    {item.isBanned && (
+                        <span style={{
+                            backgroundColor: '#EF4444',
+                            color: '#ffffff',
+                            fontSize: '10px',
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            marginLeft: '6px',
+                            fontWeight: 'bold',
+                            display: 'inline-block'
+                        }}>
+                            BANNED
+                        </span>
+                    )}
+                </div>
                 <div style={styles.tableSubText}>
                     {item.expiry || item.date ? `${item.expiry || item.date} • ` : ''}
                     Lot:{item.lotSize || item.lot_size || 1}
@@ -185,7 +201,23 @@ const SearchRow = React.memo(({
             onClick={onToggle}
         >
             <td style={styles.tdLeft}>
-                <div style={styles.tableSymbolName}>{formatSymbolName(item.name)}</div>
+                <div style={styles.tableSymbolName}>
+                    {formatSymbolName(item.name)}
+                    {item.isBanned && (
+                        <span style={{
+                            backgroundColor: '#EF4444',
+                            color: '#ffffff',
+                            fontSize: '10px',
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            marginLeft: '6px',
+                            fontWeight: 'bold',
+                            display: 'inline-block'
+                        }}>
+                            BANNED
+                        </span>
+                    )}
+                </div>
                 <div style={styles.tableSubText}>
                     {item.expiry || item.date ? `${item.expiry || item.date} • ` : ''}
                     Lot:{item.lotSize || item.lot_size || 1}
@@ -334,6 +366,21 @@ export default function Dashboard() {
     useEffect(() => {
         setSearchQuery('');
     }, [selectedCategory]);
+
+    // Filter categories to ONLY include categories that have scrips (items) available for this user
+    const activeCategories = useMemo(() => {
+        if (!globalSearchData || globalSearchData.length === 0) return CATEGORIES;
+        const list = CATEGORIES.filter(cat => {
+            return globalSearchData.some(item => getItemTab(item) === cat);
+        });
+        return list.length > 0 ? list : CATEGORIES;
+    }, [globalSearchData]);
+
+    useEffect(() => {
+        if (activeCategories.length > 0 && !activeCategories.includes(selectedCategory)) {
+            setSelectedCategory(activeCategories[0]);
+        }
+    }, [activeCategories]);
 
     // Count ALL available items per tab — always from full list, never filtered by search
     const searchCounts = useMemo(() => {
@@ -534,7 +581,7 @@ export default function Dashboard() {
                             padding: '4px 16px',
                             borderBottom: '1px solid rgba(255, 255, 255, 0.06)'
                         }}>
-                            {CATEGORIES.map(cat => (
+                            {activeCategories.map(cat => (
                                 <button
                                     key={cat}
                                     onClick={() => setSelectedCategory(cat)}
@@ -654,7 +701,7 @@ export default function Dashboard() {
                                         {pinnedCounts['ALL'] > 0 && <span style={{ ...styles.badgeBlue, backgroundColor: CAT_COLORS.ALL }}>{pinnedCounts['ALL']}</span>}
                                     </div>
                                 </button>
-                                {CATEGORIES.map(cat => (
+                                {activeCategories.map(cat => (
                                     <button
                                         key={cat}
                                         onClick={() => setSearchTab(cat)}

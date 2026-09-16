@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useMemo 
 import { io } from 'socket.io-client';
 import { SOCKET_URL } from '../constants/Config';
 import * as api from '../services/api';
+import { calculateEquityPnL } from '../utils/equityPnL';
 
 const MOCK_WATCHLIST_DATA = [
     // NFO_FUT
@@ -153,6 +154,10 @@ export const TradeProvider = ({ children }) => {
         } catch { return []; }
     });
     const [userConfig, setUserConfig] = useState(null);
+    
+    const allowedCryptoSymbolsRef = useRef(null);
+    const allowedForexSymbolsRef = useRef(null);
+    const allowedCommoditySymbolsRef = useRef(null);
     
     // Popup state
     const [successPopupVisible, setSuccessPopupVisible] = useState(false);
@@ -452,23 +457,33 @@ export const TradeProvider = ({ children }) => {
         });
 
         socket.on('market_data_update', (update) => {
-            const { type, data } = update || {};
-            if (!data || !Array.isArray(data)) return;
+            const { type, data: rawData } = update || {};
+            if (!rawData || !Array.isArray(rawData)) return;
 
             let basePrefix = 'FOREX';
             let baseCat = 'FOREX';
+            let allowedSet = null;
             if (type === 'crypto') {
                 basePrefix = 'CRYPTO';
                 baseCat = 'CRYPTO';
+                allowedSet = allowedCryptoSymbolsRef.current;
             } else if (type === 'commodity') {
                 basePrefix = 'COMMODITY';
                 baseCat = 'COMMODITY';
+                allowedSet = allowedCommoditySymbolsRef.current;
+            } else if (type === 'forex') {
+                allowedSet = allowedForexSymbolsRef.current;
+            }
+
+            let dataToMap = rawData;
+            if (allowedSet) {
+                dataToMap = dataToMap.filter(item => allowedSet.has(item.symbol) || allowedSet.has(item.name));
             }
 
             setKiteMarketData(prev => {
                 const updated = [...prev];
 
-                data.forEach(item => {
+                dataToMap.forEach(item => {
                     const cleanSym = item.symbol.replace(/:/g, '').toUpperCase();
                     const isMetal = cleanSym === 'XAUUSD' || cleanSym === 'XAGUSD' || cleanSym === 'XAU/USD' || cleanSym === 'XAG/USD';
                     const prefix = isMetal ? 'COMMODITY' : basePrefix;
@@ -532,7 +547,7 @@ export const TradeProvider = ({ children }) => {
             setLivePrices(prev => {
                 const next = { ...prev };
                 let changed = false;
-                data.forEach(item => {
+                dataToMap.forEach(item => {
                     const normKey = normalizeSymbol(item.name || item.symbol);
                     const ltp = parseFloat(item.ltp || item.price) || 0;
                     const bid = parseFloat(item.bid) || ltp;
@@ -1254,9 +1269,15 @@ export const TradeProvider = ({ children }) => {
 
                 tradePL = rawPnlUsd * usdInr;
             } else {
-                tradePL = trade.type === 'BUY'
-                    ? (exitPrice - entry) * qty * positions[key].hardcodedMultiplier
-                    : (entry - exitPrice) * qty * positions[key].hardcodedMultiplier;
+                tradePL = calculateEquityPnL({
+                    type: trade.type,
+                    entryPrice: entry,
+                    exitPrice: exitPrice,
+                    qty: qty,
+                    lotSize: trade.lot_size || positions[key].hardcodedMultiplier || 1,
+                    tradeMode: trade.trade_mode,
+                    equityUnitsMode: trade.equity_units_mode
+                });
             }
             positions[key].totalPL += tradePL;
         });
@@ -1621,6 +1642,31 @@ export const TradeProvider = ({ children }) => {
         try {
             const res = await api.getAllMarketData();
             if (res && res.status === 'success') {
+                const rawCrypto = res.crypto || [];
+                const rawForex = res.forex || [];
+                const rawCommodity = res.commodity || [];
+
+                const cryptoSet = new Set();
+                rawCrypto.forEach(i => {
+                    if (i.symbol) cryptoSet.add(i.symbol);
+                    if (i.name) cryptoSet.add(i.name);
+                });
+                allowedCryptoSymbolsRef.current = cryptoSet;
+
+                const forexSet = new Set();
+                rawForex.forEach(i => {
+                    if (i.symbol) forexSet.add(i.symbol);
+                    if (i.name) forexSet.add(i.name);
+                });
+                allowedForexSymbolsRef.current = forexSet;
+
+                const commoditySet = new Set();
+                rawCommodity.forEach(i => {
+                    if (i.symbol) commoditySet.add(i.symbol);
+                    if (i.name) commoditySet.add(i.name);
+                });
+                allowedCommoditySymbolsRef.current = commoditySet;
+
                 const mapExtra = (items, prefix, catName) => {
                     items.forEach(item => {
                         const cleanSym = item.symbol.replace(/:/g, '').toUpperCase();
@@ -1666,6 +1712,7 @@ export const TradeProvider = ({ children }) => {
                             existing.category = itemCat;
                             existing.exchange = itemPrefix;
                             existing.type = itemPrefix;
+                            if (item.isBanned) existing.isBanned = true;
                         } else {
                             mergedItemsMap.set(normKey, {
                                 id: `kite-extra-${normKey}`,
@@ -1686,42 +1733,37 @@ export const TradeProvider = ({ children }) => {
                                 date: new Date().toISOString().split('T')[0],
                                 lotSize: Number(item.lotSize || 1),
                                 status: 'active',
+                                isBanned: Boolean(item.isBanned)
                             });
                         }
                     });
                 };
 
-                if (res.crypto && res.crypto.length > 0) {
-                    for (const [key, value] of mergedItemsMap.entries()) {
-                        if (value.id.startsWith('kite-mock-') && value.category === 'CRYPTO') {
-                            mergedItemsMap.delete(key);
-                        }
+                for (const [key, value] of mergedItemsMap.entries()) {
+                    if (value.category === 'CRYPTO') {
+                        mergedItemsMap.delete(key);
                     }
-                    mapExtra(res.crypto, 'CRYPTO', 'CRYPTO');
-                } else {
-                    mapExtra([], 'CRYPTO', 'CRYPTO');
+                }
+                if (rawCrypto.length > 0) {
+                    mapExtra(rawCrypto, 'CRYPTO', 'CRYPTO');
                 }
 
-                if (res.forex && res.forex.length > 0) {
-                    for (const [key, value] of mergedItemsMap.entries()) {
-                        if (value.id.startsWith('kite-mock-') && value.category === 'FOREX') {
-                            mergedItemsMap.delete(key);
-                        }
+                for (const [key, value] of mergedItemsMap.entries()) {
+                    if (value.category === 'FOREX') {
+                        mergedItemsMap.delete(key);
                     }
-                    mapExtra(res.forex, 'FOREX', 'FOREX');
-                } else {
-                    mapExtra([], 'FOREX', 'FOREX');
+                }
+                if (rawForex.length > 0) {
+                    mapExtra(rawForex, 'FOREX', 'FOREX');
                 }
 
-                if (res.commodity && res.commodity.length > 0) {
-                    for (const [key, value] of mergedItemsMap.entries()) {
-                        if (value.id.startsWith('kite-mock-') && value.category === 'COMMODITY') {
-                            mergedItemsMap.delete(key);
-                        }
+                for (const [key, value] of mergedItemsMap.entries()) {
+                    if (value.category === 'COMMODITY') {
+                        mergedItemsMap.delete(key);
                     }
-                    mapExtra(res.commodity, 'COMMODITY', 'COMMODITY');
-                } else {
-                    mapExtra([], 'COMMODITY', 'COMMODITY');
+                }
+                if (rawCommodity.length > 0) {
+                    mapExtra(rawCommodity, 'COMMODITY', 'COMMODITY');
                 }
             }
         } catch (extraErr) {
