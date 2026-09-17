@@ -1,17 +1,9 @@
 /**
- * Standardized PnL Calculation Helper Function for Equity / NFO Futures & Options
- *
- * @param {Object} params
- * @param {string} params.type - 'BUY' or 'SELL'
- * @param {number} params.entryPrice - Entry/Average Buy or Sell Rate
- * @param {number} params.exitPrice - Current Market Price (CMP) or Exit Price
- * @param {number} [params.qty] - Trade quantity (may be actual_qty or total shares)
- * @param {number} [params.qtyInput] - User input quantity (Lots or Units)
- * @param {number} [params.actualQty] - Calculated total shares/units
- * @param {number} [params.lotSize=1] - Contract Lot Size (e.g. 309 for ADANIENT)
- * @param {string} [params.tradeMode] - 'UNITS' or 'LOTS'
- * @param {number|boolean} [params.equityUnitsMode] - 1 or true if trading in units/quantity
- * @returns {number} Calculated PnL
+ * Standardized PnL Calculation Helper Functions
+ */
+
+/**
+ * 1. Equity & NFO Futures/Options Dedicated Helper
  */
 export const calculateEquityPnL = ({
     type,
@@ -35,7 +27,6 @@ export const calculateEquityPnL = ({
         equityUnitsMode === '1' ||
         equityUnitsMode === 'true';
 
-    // Calculate total effective shares/units
     let totalShares = 0;
     if (actualQty != null && !isNaN(parseFloat(actualQty)) && parseFloat(actualQty) > 0) {
         totalShares = parseFloat(actualQty);
@@ -49,4 +40,27 @@ export const calculateEquityPnL = ({
 
     const priceDiff = (type || '').toUpperCase() === 'BUY' ? (exit - entry) : (entry - exit);
     return priceDiff * totalShares;
+};
+
+/**
+ * 2. MCX Commodities Dedicated Helper
+ */
+export const calculateMcxPnL = ({
+    type,
+    entryPrice,
+    exitPrice,
+    qty,
+    qtyInput,
+    lotSize = 1
+}) => {
+    const entry = parseFloat(entryPrice || 0);
+    const exit = parseFloat(exitPrice || 0);
+    const lot = parseFloat(lotSize || 1);
+    const lotsCount = parseFloat(qtyInput != null ? qtyInput : qty || 0);
+
+    // MCX is strictly traded in Lots * LotSize
+    const totalUnits = lotsCount * lot;
+
+    const priceDiff = (type || '').toUpperCase() === 'BUY' ? (exit - entry) : (entry - exit);
+    return priceDiff * totalUnits;
 };

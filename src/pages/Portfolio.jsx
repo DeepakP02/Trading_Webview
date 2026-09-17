@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTrades, normalizeSymbol, getLivePriceObject } from '../context/TradeContext';
+import { calculateSegmentMargin } from '../utils/segmentMargin';
 import { formatPrice } from '../utils/formatPrice';
 import { X, ChevronLeft, RefreshCw } from 'lucide-react';
 import useResponsive from '../hooks/useResponsive';
@@ -336,27 +337,43 @@ export default function Portfolio() {
                     </div>
                 ) : (
                     <main style={styles.positionsList}>
-                        {aggregatedPositions.map(pos => (
-                            <div key={pos.name} style={styles.positionCard}>
-                                {/* Header row with badges and holding margin */}
-                                <div style={styles.positionHeaderRow}>
-                                    <div style={styles.badgeContainer}>
-                                        <span style={{
-                                            ...styles.boughtBadge,
-                                            backgroundColor: pos.type === 'SELL' ? 'rgba(255, 59, 48, 0.15)' : 'rgba(76, 175, 80, 0.15)',
-                                            color: pos.type === 'SELL' ? '#ff3b30' : '#4caf50'
-                                        }}>
-                                            {pos.type === 'BUY' ? 'Bought' : 'Sold'}
-                                        </span>
-                                        <span style={styles.qtyBadge}>
-                                            QTY {pos.qty}
-                                        </span>
+                        {aggregatedPositions.map(pos => {
+                            const isUnitMode = userConfig?.tradeEquityUnits === 1 || userConfig?.tradeEquityUnits === true;
+                            let cardHoldingMargin = calculateSegmentMargin({
+                                marketType: pos.market || pos.market_type || pos.marketType || 'MCX',
+                                symbol: pos.name || pos.symbol,
+                                price: pos.avgPrice || pos.entryPrice || 0,
+                                qty: Math.abs(pos.qty || 1),
+                                lotSize: pos.lot_size || 1,
+                                isHolding: true,
+                                clientConfig: userConfig || {},
+                                isUnitMode: isUnitMode
+                            });
+                            if (cardHoldingMargin <= 0 && pos.margin_used > 0) {
+                                cardHoldingMargin = pos.margin_used;
+                            }
+
+                            return (
+                                <div key={pos.name} style={styles.positionCard}>
+                                    {/* Header row with badges and holding margin */}
+                                    <div style={styles.positionHeaderRow}>
+                                        <div style={styles.badgeContainer}>
+                                            <span style={{
+                                                ...styles.boughtBadge,
+                                                backgroundColor: pos.type === 'SELL' ? 'rgba(255, 59, 48, 0.15)' : 'rgba(76, 175, 80, 0.15)',
+                                                color: pos.type === 'SELL' ? '#ff3b30' : '#4caf50'
+                                            }}>
+                                                {pos.type === 'BUY' ? 'Bought' : 'Sold'}
+                                            </span>
+                                            <span style={styles.qtyBadge}>
+                                                QTY {pos.qty}
+                                            </span>
+                                        </div>
+                                        <div style={styles.marginSection}>
+                                            <span style={styles.marginLabelText}>Holding Margin Required</span>
+                                            <span style={styles.marginValText}>{cardHoldingMargin.toFixed(2)}</span>
+                                        </div>
                                     </div>
-                                    <div style={styles.marginSection}>
-                                        <span style={styles.marginLabelText}>Holding Margin Required</span>
-                                        <span style={styles.marginValText}>{pos.margin_used.toFixed(2)}</span>
-                                    </div>
-                                </div>
 
                                 {/* Symbol Name */}
                                 <div style={styles.symbolRow}>

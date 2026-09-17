@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { io } from 'socket.io-client';
 import { SOCKET_URL } from '../constants/Config';
-import * as api from '../services/api';
-import { calculateEquityPnL } from '../utils/equityPnL';
+import { calculateEquityPnL, calculateMcxPnL } from '../utils/equityPnL';
+import { calculateUsdPnL, calculateCryptoPnL, calculateForexPnL, calculateComexPnL } from '../utils/usdPnL';
+import { calculateSegmentMargin, isMcxSymbol } from '../utils/segmentMargin';
 
 const MOCK_WATCHLIST_DATA = [
     // NFO_FUT
@@ -1029,18 +1030,41 @@ export const TradeProvider = ({ children }) => {
                         isDynamic: true,
                         isExposureBased: false
                     };
-                } else {
-                    const intradayExposure = parseFloat(segConfig.intradayMargin || 100);
-                    const holdingExposure = parseFloat(segConfig.holdingMargin || segConfig.intradayMargin || 100);
-                    return {
-                        multiplier: 1,
-                        intradayExposure,
-                        holdingExposure,
-                        market: resolvedMarket,
-                        isDynamic: true,
-                        isExposureBased: true
-                    };
-                }
+                const lowType = resolvedMarket.toLowerCase();
+                const getVal = (...keys) => {
+                    for (const k of keys) {
+                        if (userConfig[k] !== undefined && userConfig[k] !== null && userConfig[k] !== '') {
+                            const parsed = parseFloat(userConfig[k]);
+                            if (!isNaN(parsed) && parsed > 0) return parsed;
+                        }
+                    }
+                    return null;
+                };
+
+                const rootIntraday = getVal(
+                    `${lowType}IntradayMargin`, `${lowType}_intraday_margin`,
+                    `${lowType}IntradayExposure`, `${lowType}_intraday_exposure`,
+                    `${lowType}Intraday`, `${lowType}_intraday`
+                );
+                const rootHolding = getVal(
+                    `${lowType}HoldingMargin`, `${lowType}_holding_margin`,
+                    `${lowType}HoldingExposure`, `${lowType}_holding_exposure`,
+                    `${lowType}Holding`, `${lowType}_holding`
+                );
+
+                const secIntraday = parseFloat(segConfig.intradayMargin || segConfig.intraday_margin || segConfig.intradayExposure || segConfig.intraday_exposure || segConfig.intraday || 0) || null;
+                const secHolding = parseFloat(segConfig.holdingMargin || segConfig.holding_margin || segConfig.holdingExposure || segConfig.holding_exposure || segConfig.holding || 0) || null;
+
+                const intradayExposure = rootIntraday || secIntraday || 500;
+                const holdingExposure = rootHolding || secHolding || 100;
+                return {
+                    multiplier: 1,
+                    intradayExposure,
+                    holdingExposure,
+                    market: resolvedMarket,
+                    isDynamic: true,
+                    isExposureBased: true
+                };
             }
 
             // B. Check for Instrument Specific Settings first (mcxLotMargins)
@@ -1186,9 +1210,9 @@ export const TradeProvider = ({ children }) => {
 
         activeTrades.forEach(trade => {
             const key = trade.name;
+            const meta = getInstrumentMeta(trade.name, trade.market);
             if (!positions[key]) {
                 const hardcodedMultiplier = getHardcodedMultiplier(trade.name);
-                const meta = getInstrumentMeta(trade.name, trade.market);
 
                 positions[key] = {
                     ...trade,
@@ -1201,14 +1225,14 @@ export const TradeProvider = ({ children }) => {
                     totalPL: 0,
                     hardcodedMultiplier: hardcodedMultiplier,
                     multiplier: hardcodedMultiplier,
-                    dynamicMarginPerLot: meta.intradayMargin,
-                    dynamicHoldingMarginPerLot: meta.holdingMargin,
-                    intradayExposure: meta.intradayExposure,
-                    holdingExposure: meta.holdingExposure,
+                    dynamicMarginPerLot: meta?.intradayMargin || 0,
+                    dynamicHoldingMarginPerLot: meta?.holdingMargin || 0,
+                    intradayExposure: meta?.intradayExposure || 100,
+                    holdingExposure: meta?.holdingExposure || 100,
                     tradeIds: [],
-                    market: meta.market || 'MCX',
-                    isDynamic: meta.isDynamic,
-                    isExposureBased: meta.isExposureBased
+                    market: meta?.market || 'MCX',
+                    isDynamic: meta?.isDynamic || false,
+                    isExposureBased: meta?.isExposureBased || false
                 };
             }
 
@@ -1229,20 +1253,19 @@ export const TradeProvider = ({ children }) => {
                 positions[key].totalSellCost += (qty * entry);
             }
 
-            const meta = getInstrumentMeta(trade.name, trade.market);
-            let tradeHoldingMargin = 0;
-            if (meta.isExposureBased && meta.holdingExposure > 0) {
-                tradeHoldingMargin = (entry * qty) / meta.holdingExposure;
-            } else if (meta.isExposureBased && meta.intradayExposure > 0) {
-                tradeHoldingMargin = (entry * qty) / meta.intradayExposure;
-            } else if (meta.holdingMargin > 0) {
-                tradeHoldingMargin = meta.holdingMargin * qty;
-            } else if (meta.intradayMargin > 0) {
-                tradeHoldingMargin = meta.intradayMargin * qty;
-            } else {
-                tradeHoldingMargin = margin;
-            }
-            positions[key].totalHoldingMargin += tradeHoldingMargin;
+            // Calculate holding/used margin for this trade using standard segment margin helper
+            const hardcodedMult = getHardcodedMultiplier(trade.name) || getHardcodedMultiplier(trade.symbol);
+            const tradeMargin = calculateSegmentMargin({
+                marketType: trade.market || trade.market_type || 'MCX',
+                symbol: trade.name || trade.symbol,
+                price: entry,
+                qty: qty,
+                lotSize: hardcodedMult > 1 ? hardcodedMult : (trade.lot_size || meta?.multiplier || 1),
+                isHolding: true,
+                clientConfig: userConfig || {},
+                isUnitMode: userConfig?.tradeEquityUnits === 1 || userConfig?.tradeEquityUnits === true
+            });
+            positions[key].totalHoldingMargin += (tradeMargin > 0 ? tradeMargin : margin);
 
             const liveData = getLivePriceObject(trade.name, livePrices) || getLivePriceObject(trade.displayName, livePrices) || {};
             const liveLtp = parseFloat(liveData.ltp || 0);
@@ -1258,26 +1281,46 @@ export const TradeProvider = ({ children }) => {
                 const usdInrLive = livePrices['USD/INR'] || livePrices['USDINR'];
                 const liveBid = usdInrLive ? parseFloat(usdInrLive.bid) || null : null;
                 const liveAsk = usdInrLive ? parseFloat(usdInrLive.ask) || null : null;
+                const mType = (trade.market || '').toUpperCase();
 
-                const rawPnlUsd = trade.type === 'BUY'
-                    ? (exitPrice - entry) * lotSize * qty
-                    : (entry - exitPrice) * lotSize * qty;
+                const tradeSym = trade.name || trade.symbol || '';
+                let calcRes;
+                if (mType === 'CRYPTO') {
+                    calcRes = calculateCryptoPnL({ symbol: tradeSym, type: trade.type, entryPrice: entry, exitPrice: exitPrice, qty: qty, qtyInput: trade.qty_input, lotSize, fallbackUsdInr, liveBid, liveAsk });
+                } else if (mType === 'FOREX') {
+                    calcRes = calculateForexPnL({ symbol: tradeSym, type: trade.type, entryPrice: entry, exitPrice: exitPrice, qty: qty, qtyInput: trade.qty_input, lotSize, fallbackUsdInr, liveBid, liveAsk });
+                } else {
+                    calcRes = calculateComexPnL({ symbol: tradeSym, type: trade.type, entryPrice: entry, exitPrice: exitPrice, qty: qty, qtyInput: trade.qty_input, lotSize, fallbackUsdInr, liveBid, liveAsk });
+                }
 
-                let usdInr = rawPnlUsd >= 0
-                    ? (liveAsk || fallbackUsdInr * 0.90)
-                    : (liveBid || fallbackUsdInr * 1.10);
-
-                tradePL = rawPnlUsd * usdInr;
+                tradePL = calcRes.pnlInr;
             } else {
-                tradePL = calculateEquityPnL({
-                    type: trade.type,
-                    entryPrice: entry,
-                    exitPrice: exitPrice,
-                    qty: qty,
-                    lotSize: trade.lot_size || positions[key].hardcodedMultiplier || 1,
-                    tradeMode: trade.trade_mode,
-                    equityUnitsMode: trade.equity_units_mode
-                });
+                const hardcodedMult = getHardcodedMultiplier(trade.name) || getHardcodedMultiplier(trade.fullSymbol);
+                const dbLotVal = getDbLotSize(trade.name) || getDbLotSize(trade.fullSymbol);
+                const lotSize = parseFloat(trade.lot_size || dbLotVal || trade.lot_size_at_entry || (hardcodedMult > 1 ? hardcodedMult : null) || positions[key]?.hardcodedMultiplier || 1);
+                const isMcxTrade = mType === 'MCX' || (trade.market || trade.market_type || '').toUpperCase() === 'MCX' || isMcxSymbol(trade.name || trade.fullSymbol || '');
+                if (isMcxTrade) {
+                    tradePL = calculateMcxPnL({
+                        type: trade.type,
+                        entryPrice: entry,
+                        exitPrice: exitPrice,
+                        qty: qty,
+                        qtyInput: trade.qty_input,
+                        lotSize: lotSize
+                    });
+                } else {
+                    tradePL = calculateEquityPnL({
+                        type: trade.type,
+                        entryPrice: entry,
+                        exitPrice: exitPrice,
+                        qty: qty,
+                        qtyInput: trade.qty_input,
+                        actualQty: trade.actual_qty,
+                        lotSize: lotSize,
+                        tradeMode: trade.trade_mode,
+                        equityUnitsMode: trade.equity_units_mode
+                    });
+                }
             }
             positions[key].totalPL += tradePL;
         });
@@ -1316,14 +1359,14 @@ export const TradeProvider = ({ children }) => {
     }, [trades, livePrices, userConfig]);
 
     const activePL = useMemo(() => aggregatedPositions.reduce((sum, pos) => sum + pos.pnl, 0), [aggregatedPositions]);
-    const totalDynamicMargin = useMemo(() => aggregatedPositions.reduce((sum, pos) => sum + pos.margin_used, 0), [aggregatedPositions]);
+    const totalDynamicMargin = useMemo(() => aggregatedPositions.reduce((sum, pos) => sum + (pos.totalHoldingMargin || 0), 0), [aggregatedPositions]);
 
     const dynamicMarginBySegment = useMemo(() => {
         const segments = { MCX: 0, EQUITY: 0, OPTIONS: 0, COMEX: 0, FOREX: 0, CRYPTO: 0 };
         aggregatedPositions.forEach(pos => {
             let mkt = pos.market || 'MCX';
             if (mkt === 'NSE') mkt = 'EQUITY';
-            if (segments[mkt] !== undefined) segments[mkt] += pos.margin_used;
+            if (segments[mkt] !== undefined) segments[mkt] += (pos.totalHoldingMargin || 0);
         });
         return segments;
     }, [aggregatedPositions]);

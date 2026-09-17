@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTrades, normalizeSymbol } from '../context/TradeContext';
+import { calculateSegmentMargin } from '../utils/segmentMargin';
 import { formatPrice } from '../utils/formatPrice';
 import { Edit2, X, AlertTriangle, ChevronLeft, RefreshCw } from 'lucide-react';
 import * as api from '../services/api';
@@ -472,27 +473,36 @@ export default function Trades() {
                         // Margin Calculations
                         let holdingMargin = 0;
                         const qty = Math.abs(trade.qty || 1);
-                        const entry = parseFloat(trade.entryPrice || 0);
-                        const turnover = entry * qty;
-                        const isExposure = !!meta?.isExposureBased;
-                        let displayMarginUsed = parseFloat(trade.margin_used || 0);
+                        const entry = parseFloat(trade.entryPrice || trade.entry_price || 0);
+                        const isUnitMode = userConfig?.tradeEquityUnits === 1 || userConfig?.tradeEquityUnits === true;
 
-                        if (isExposure) {
-                            if (meta?.holdingExposure > 0) {
-                                holdingMargin = turnover / meta.holdingExposure;
-                            }
-                            if (meta?.intradayExposure > 0) {
-                                displayMarginUsed = turnover / meta.intradayExposure;
-                            }
-                        } else {
-                            holdingMargin = (meta?.holdingMargin || 0) * qty;
-                            if (meta?.intradayMargin > 0) {
-                                displayMarginUsed = meta.intradayMargin * qty;
-                            }
+                        let displayMarginUsed = calculateSegmentMargin({
+                            marketType: trade.marketType || trade.market_type || trade.market || 'MCX',
+                            symbol: trade.name || trade.symbol,
+                            price: entry,
+                            qty: qty,
+                            lotSize: trade.lot_size || meta?.multiplier || 1,
+                            isHolding: false,
+                            clientConfig: userConfig || {},
+                            isUnitMode: isUnitMode
+                        });
+
+                        let holdingMargin = calculateSegmentMargin({
+                            marketType: trade.marketType || trade.market_type || trade.market || 'MCX',
+                            symbol: trade.name || trade.symbol,
+                            price: entry,
+                            qty: qty,
+                            lotSize: trade.lot_size || meta?.multiplier || 1,
+                            isHolding: true,
+                            clientConfig: userConfig || {},
+                            isUnitMode: isUnitMode
+                        });
+
+                        if (displayMarginUsed <= 0 && parseFloat(trade.margin_used || 0) > 0) {
+                            displayMarginUsed = parseFloat(trade.margin_used);
                         }
-
-                        if (holdingMargin <= 0 && parseFloat(trade.margin_used || 0) > 0) {
-                            holdingMargin = parseFloat(trade.margin_used || 0);
+                        if (holdingMargin <= 0 && displayMarginUsed > 0) {
+                            holdingMargin = displayMarginUsed;
                         }
 
                         const formattedName = formatSymbolName(trade.displayName || trade.name);
