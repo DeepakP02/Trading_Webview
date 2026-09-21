@@ -428,7 +428,8 @@ export default function Portfolio() {
                                     </button>
                                 </div>
                             </div>
-                        ))}
+                        );
+                    })}
                     </main>
                 )}
             </div>

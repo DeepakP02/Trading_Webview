@@ -47,11 +47,23 @@ export const clearSession = () => {
     console.log('✅ Session cleared');
 };
 
+if (typeof window !== 'undefined' && !sessionStorage.getItem('client_public_ip')) {
+    fetch('https://api.ipify.org?format=json')
+        .then(r => r.json())
+        .then(d => { if (d && d.ip) sessionStorage.setItem('client_public_ip', d.ip); })
+        .catch(() => {});
+}
+
 const getHeaders = async () => {
-    return {
+    const headers = {
         'Content-Type': 'application/json',
         'Authorization': userSession.token ? `Bearer ${userSession.token}` : '',
     };
+    if (typeof window !== 'undefined') {
+        const clientIp = sessionStorage.getItem('client_public_ip');
+        if (clientIp) headers['X-Client-IP'] = clientIp;
+    }
+    return headers;
 };
 
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {

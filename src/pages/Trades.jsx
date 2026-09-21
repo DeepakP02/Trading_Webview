@@ -109,18 +109,41 @@ export default function Trades() {
     }, []);
 
     // Filter trades based on activeTab (aligned with mobile app TradesScreen.js)
-    const filteredTrades = trades.filter(t => {
+    const filteredTrades = React.useMemo(() => {
         if (activeTab === 'Pending') {
-            return t.isPending && !t.isCompleted && !t.exitPrice;
+            const list = [];
+            trades.forEach(t => {
+                if (t.isPending && !t.isCompleted && !t.exitPrice) {
+                    list.push(t);
+                }
+                if (!t.isPending && !t.isCompleted && !t.exitPrice) {
+                    const targetVal = t.target || t.target_price;
+                    const slVal = t.stop_loss || t.stopLoss || t.sl;
+                    if (targetVal || slVal) {
+                        list.push({
+                            ...t,
+                            id: `target_sl_${t.id}`,
+                            parentTradeId: t.id,
+                            isTargetSLOrder: true,
+                            type: t.type === 'BUY' ? 'SELL' : 'BUY',
+                            displayTarget: targetVal,
+                            displaySL: slVal,
+                            entryPrice: targetVal || slVal,
+                            parentTrade: t
+                        });
+                    }
+                }
+            });
+            return list;
         }
         if (activeTab === 'Active') {
-            return !t.isCompleted && !t.isPending && !t.exitPrice;
+            return trades.filter(t => !t.isCompleted && !t.isPending && !t.exitPrice);
         }
         if (activeTab === 'Closed') {
-            return t.isCompleted || !!t.exitPrice;
+            return trades.filter(t => t.isCompleted || !!t.exitPrice);
         }
-        return false;
-    });
+        return [];
+    }, [trades, activeTab]);
 
     const handleOpenCloseModal = (trade) => {
         setSelectedTrade(trade);
@@ -176,6 +199,10 @@ export default function Trades() {
     };
 
     const handleOpenEditModal = (trade) => {
+        if (trade.isTargetSLOrder) {
+            handleOpenTargetSlModal(trade.parentTrade || trade);
+            return;
+        }
         setSelectedTrade(trade);
         setEditQty(trade.qty);
         setEditPrice(trade.entryPrice);
@@ -188,6 +215,24 @@ export default function Trades() {
         setLoading(true);
         setErrorMessage('');
         try {
+            if (selectedTrade.isTargetSLOrder) {
+                const parent = selectedTrade.parentTrade || {};
+                let newTarget = parent.target || parent.target_price || null;
+                let newSL = parent.stop_loss || parent.stopLoss || parent.sl || null;
+
+                if (selectedTrade.orderKind === 'TARGET') {
+                    newTarget = parseFloat(editPrice);
+                } else {
+                    newSL = parseFloat(editPrice);
+                }
+
+                await setTargetSL(selectedTrade.parentTradeId, newTarget, newSL);
+                await refreshTrades();
+                setShowEditModal(false);
+                setSelectedTrade(null);
+                return;
+            }
+
             await api.modifyPendingOrder(selectedTrade.id, parseInt(editQty), parseFloat(editPrice));
             await refreshTrades();
             setShowEditModal(false);
@@ -208,6 +253,14 @@ export default function Trades() {
         if (!selectedTrade) return;
         setLoading(true);
         try {
+            if (selectedTrade.isTargetSLOrder) {
+                await setTargetSL(selectedTrade.parentTradeId, null, null);
+                await refreshTrades();
+                setShowCancelModal(false);
+                setSelectedTrade(null);
+                return;
+            }
+
             await cancelTrade(selectedTrade.id);
             await refreshTrades();
             setShowCancelModal(false);
@@ -249,6 +302,31 @@ export default function Trades() {
                 return;
             }
         }
+        const entry = parseFloat(selectedTrade.entryPrice || selectedTrade.entry_price || 0);
+        const isBuy = selectedTrade.type === 'BUY';
+        const targetVal = targetPrice ? parseFloat(targetPrice) : null;
+        const slVal = stopLoss ? parseFloat(stopLoss) : null;
+
+        if (isBuy) {
+            if (targetVal !== null && !isNaN(targetVal) && targetVal <= entry) {
+                setErrorMessage(`For BUY trade at ${entry}, Target Price must be greater than entry price (${entry}).`);
+                return;
+            }
+            if (slVal !== null && !isNaN(slVal) && slVal >= entry) {
+                setErrorMessage(`For BUY trade at ${entry}, Stop Loss must be less than entry price (${entry}).`);
+                return;
+            }
+        } else {
+            if (targetVal !== null && !isNaN(targetVal) && targetVal >= entry) {
+                setErrorMessage(`For SELL trade at ${entry}, Target Price must be less than entry price (${entry}).`);
+                return;
+            }
+            if (slVal !== null && !isNaN(slVal) && slVal <= entry) {
+                setErrorMessage(`For SELL trade at ${entry}, Stop Loss must be greater than entry price (${entry}).`);
+                return;
+            }
+        }
+
         setLoading(true);
         setErrorMessage('');
         try {
@@ -471,7 +549,6 @@ export default function Trades() {
                         const meta = getInstrumentMeta ? getInstrumentMeta(trade.name, trade.market) : null;
                         
                         // Margin Calculations
-                        let holdingMargin = 0;
                         const qty = Math.abs(trade.qty || 1);
                         const entry = parseFloat(trade.entryPrice || trade.entry_price || 0);
                         const isUnitMode = userConfig?.tradeEquityUnits === 1 || userConfig?.tradeEquityUnits === true;
@@ -517,6 +594,25 @@ export default function Trades() {
                                         <span style={styles.pendingPriceText}>{formatPrice(trade.entryPrice)}</span>
                                     </div>
 
+                                    {/* Target / SL Order Badge */}
+                                    {trade.isTargetSLOrder && (
+                                        <div style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            backgroundColor: 'rgba(74, 186, 120, 0.15)',
+                                            border: '1px solid rgba(74, 186, 120, 0.4)',
+                                            color: '#4ABA78',
+                                            fontSize: '11px',
+                                            fontWeight: 'bold',
+                                            padding: '3px 8px',
+                                            borderRadius: '4px',
+                                            marginTop: '4px',
+                                            marginBottom: '6px'
+                                        }}>
+                                            ● 🎯 Target / SL Order (Exit Order)
+                                        </div>
+                                    )}
+
                                     {/* Row 2: Type, Qty, Time | Action Buttons */}
                                     <div style={styles.pendingRow2}>
                                         <div>
@@ -545,11 +641,30 @@ export default function Trades() {
                                         </div>
                                     </div>
 
-                                    {/* Row 3: Margins */}
+                                    {/* Row 3: Margins & Target/SL Prices */}
                                     <div style={styles.pendingRow3}>
                                         <div>
-                                            <div style={styles.pendingInfoLabel}>Limit Price</div>
-                                            <div style={styles.pendingInfoValue}>{formatPrice(trade.entryPrice)}</div>
+                                            {trade.isTargetSLOrder ? (
+                                                <div style={{ display: 'flex', gap: '16px', marginBottom: '4px' }}>
+                                                    {trade.displayTarget && (
+                                                        <div>
+                                                            <div style={styles.pendingInfoLabel}>Target Price</div>
+                                                            <div style={{ ...styles.pendingInfoValue, color: '#4ABA78' }}>₹{formatPrice(trade.displayTarget)}</div>
+                                                        </div>
+                                                    )}
+                                                    {trade.displaySL && (
+                                                        <div>
+                                                            <div style={styles.pendingInfoLabel}>Stop Loss Price</div>
+                                                            <div style={{ ...styles.pendingInfoValue, color: '#EF5350' }}>₹{formatPrice(trade.displaySL)}</div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div style={styles.pendingInfoLabel}>Limit Price</div>
+                                                    <div style={styles.pendingInfoValue}>{formatPrice(trade.entryPrice)}</div>
+                                                </>
+                                            )}
                                             <div style={{ ...styles.pendingInfoLabel, marginTop: '6px' }}>
                                                 Holding Margin Required {holdingMargin.toFixed(2)}
                                             </div>

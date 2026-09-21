@@ -4,6 +4,7 @@ import { SOCKET_URL } from '../constants/Config';
 import { calculateEquityPnL, calculateMcxPnL } from '../utils/equityPnL';
 import { calculateUsdPnL, calculateCryptoPnL, calculateForexPnL, calculateComexPnL } from '../utils/usdPnL';
 import { calculateSegmentMargin, isMcxSymbol } from '../utils/segmentMargin';
+import * as api from '../services/api';
 
 const MOCK_WATCHLIST_DATA = [
     // NFO_FUT
@@ -155,7 +156,16 @@ export const TradeProvider = ({ children }) => {
         } catch { return []; }
     });
     const [userConfig, setUserConfig] = useState(null);
-    
+    const [dbLotSizes, setDbLotSizes] = useState({});
+
+    const getDbLotSize = (name) => {
+        if (!name) return null;
+        const cleanSym = name.includes(':') ? name.split(':')[1] : name;
+        const normKey = normalizeSymbol(cleanSym);
+        const upperSym = cleanSym.toUpperCase();
+        return dbLotSizes[name] || dbLotSizes[cleanSym] || dbLotSizes[upperSym] || dbLotSizes[normKey] || null;
+    };
+
     const allowedCryptoSymbolsRef = useRef(null);
     const allowedForexSymbolsRef = useRef(null);
     const allowedCommoditySymbolsRef = useRef(null);
@@ -670,6 +680,22 @@ export const TradeProvider = ({ children }) => {
         if (!api.hasSession()) return;
 
         try {
+            // Fetch DB lot sizes map from backend
+            try {
+                const token = api.getToken();
+                if (token) {
+                    const scripRes = await fetch(`${SOCKET_URL}/api/dashboard/scrips`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (scripRes.ok) {
+                        const scripMapData = await scripRes.json();
+                        setDbLotSizes(scripMapData);
+                    }
+                }
+            } catch (e) {
+                console.warn('⚠️ Could not fetch DB scrips lot sizes:', e.message);
+            }
+
             const promises = [
                 api.getMe().catch(meErr => {
                     console.warn('⚠️ Could not fetch current user details:', meErr.message);
@@ -1030,6 +1056,7 @@ export const TradeProvider = ({ children }) => {
                         isDynamic: true,
                         isExposureBased: false
                     };
+                }
                 const lowType = resolvedMarket.toLowerCase();
                 const getVal = (...keys) => {
                     for (const k of keys) {
@@ -1274,6 +1301,7 @@ export const TradeProvider = ({ children }) => {
             const ask = (liveData && parseFloat(liveData.ask) > 0) ? parseFloat(liveData.ask) : ltp;
 
             const exitPrice = trade.type === 'BUY' ? bid : ask;
+            const mType = (trade.market || trade.market_type || '').toUpperCase();
             let tradePL = 0;
             if (trade.is_commodity) {
                 const lotSize = Number(trade.lot_size) || 1;
@@ -1281,7 +1309,6 @@ export const TradeProvider = ({ children }) => {
                 const usdInrLive = livePrices['USD/INR'] || livePrices['USDINR'];
                 const liveBid = usdInrLive ? parseFloat(usdInrLive.bid) || null : null;
                 const liveAsk = usdInrLive ? parseFloat(usdInrLive.ask) || null : null;
-                const mType = (trade.market || '').toUpperCase();
 
                 const tradeSym = trade.name || trade.symbol || '';
                 let calcRes;
@@ -1298,7 +1325,7 @@ export const TradeProvider = ({ children }) => {
                 const hardcodedMult = getHardcodedMultiplier(trade.name) || getHardcodedMultiplier(trade.fullSymbol);
                 const dbLotVal = getDbLotSize(trade.name) || getDbLotSize(trade.fullSymbol);
                 const lotSize = parseFloat(trade.lot_size || dbLotVal || trade.lot_size_at_entry || (hardcodedMult > 1 ? hardcodedMult : null) || positions[key]?.hardcodedMultiplier || 1);
-                const isMcxTrade = mType === 'MCX' || (trade.market || trade.market_type || '').toUpperCase() === 'MCX' || isMcxSymbol(trade.name || trade.fullSymbol || '');
+                const isMcxTrade = mType === 'MCX' || isMcxSymbol(trade.name || trade.fullSymbol || '');
                 if (isMcxTrade) {
                     tradePL = calculateMcxPnL({
                         type: trade.type,
@@ -2091,6 +2118,8 @@ export const TradeProvider = ({ children }) => {
             addWithdrawalRequest,
             updateWithdrawalStatus,
             INSTRUMENT_META,
+            getDbLotSize,
+            dbLotSizes,
             getInstrumentMeta,
             refreshBalance,
             watchlist: kiteMarketData,
