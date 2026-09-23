@@ -28,7 +28,7 @@ export default function OrderDetail() {
     const navigate = useNavigate();
     const { isMobile } = useResponsive();
     const location = useLocation();
-    
+
     const { addTrade, addNotification, livePrices, watchlist, userConfig, trades } = useTrades();
 
     // Retrieve state item fallback
@@ -53,7 +53,7 @@ export default function OrderDetail() {
     // Normalize symbol for live price matching
     const normKey = normalizeSymbol(name);
     const liveData = livePrices[normKey] || {};
-    
+
     const ltp = Number(liveData.ltp || liveItem.ltp || 0);
     const bid = Number(liveData.bid || liveItem.bid || 0) || Number((ltp * 0.9995).toFixed(2));
     const ask = Number(liveData.ask || liveItem.ask || 0) || Number((ltp * 1.0005).toFixed(2));
@@ -61,7 +61,7 @@ export default function OrderDetail() {
     const low = Number(liveData.low || liveItem.low || 0) || Number((ltp * 0.985).toFixed(2));
     const open = Number(liveData.open || liveItem.open || 0) || Number((ltp * 0.995).toFixed(2));
     const close = Number(liveData.close || liveItem.close || 0) || Number((ltp * 1.002).toFixed(2));
-    
+
     const chgVal = Number(liveData.change !== undefined ? liveData.change : (liveItem.changePct || liveItem.change || 0));
     const volVal = Number(liveData.volume !== undefined ? liveData.volume : (liveItem.volume || 100000));
 
@@ -70,7 +70,7 @@ export default function OrderDetail() {
     const [price, setPrice] = useState(String(ltp));
     const [txnPassword, setTxnPassword] = useState('');
     const [showPlainPassword, setShowPlainPassword] = useState(false);
-    
+
     const [placing, setPlacing] = useState(false);
     const [placingType, setPlacingType] = useState(null);
     const [modalVisible, setModalVisible] = useState(false);
@@ -191,7 +191,7 @@ export default function OrderDetail() {
 
             const action = type === 'SELL' ? 'Sold' : 'Bought';
             const qtyLabel = isUnitMode ? 'qty' : 'lot';
-            
+
             addNotification({
                 title: `${isMarket ? 'Market' : 'Limit'} Order placed`,
                 message: `${action} ${userInput} ${qtyLabel} of ${name} at ${formatPrice(finalPrice)}`,
@@ -254,17 +254,17 @@ export default function OrderDetail() {
                 <div style={styles.exchangeBar}>
                     <span style={{
                         ...styles.exchangeTag,
-                        backgroundColor: exchange === 'MCX' 
-                            ? 'rgba(255,152,0,0.15)' 
-                            : exchange === 'NFO' 
-                                ? 'rgba(156,39,176,0.15)' 
+                        backgroundColor: exchange === 'MCX'
+                            ? 'rgba(255,152,0,0.15)'
+                            : exchange === 'NFO'
+                                ? 'rgba(156,39,176,0.15)'
                                 : exchange === 'COMMODITY'
                                     ? 'rgba(233,30,99,0.15)'
                                     : 'rgba(33,150,243,0.15)',
-                        color: exchange === 'MCX' 
-                            ? '#FFB74D' 
-                            : exchange === 'NFO' 
-                                ? '#CE93D8' 
+                        color: exchange === 'MCX'
+                            ? '#FFB74D'
+                            : exchange === 'NFO'
+                                ? '#CE93D8'
                                 : exchange === 'COMMODITY'
                                     ? '#E91E63'
                                     : '#64B5F6'
@@ -278,8 +278,8 @@ export default function OrderDetail() {
                     <div style={styles.tabOuter}>
                         <button
                             onClick={() => setActiveTab('Market')}
-                            style={{ 
-                                ...styles.tabPart, 
+                            style={{
+                                ...styles.tabPart,
                                 ...(activeTab === 'Market' ? styles.bgActive : styles.bgInactive),
                                 color: activeTab === 'Market' ? '#1a2240' : '#ffffff'
                             }}
@@ -288,8 +288,8 @@ export default function OrderDetail() {
                         </button>
                         <button
                             onClick={() => setActiveTab('Order')}
-                            style={{ 
-                                ...styles.tabPart, 
+                            style={{
+                                ...styles.tabPart,
                                 ...(activeTab === 'Order' ? styles.bgActive : styles.bgInactive),
                                 color: activeTab === 'Order' ? '#1a2240' : '#ffffff'
                             }}

@@ -439,7 +439,7 @@ export const aiParseOnly = async (text) => {
 
 export const aiTranscribeVoice = async (audioBlob) => {
     const formData = new FormData();
-    formData.append('file', audioBlob, 'voice.wav');
+    formData.append('audio', audioBlob, 'voice.wav');
     
     const headers = await getHeaders();
     delete headers['Content-Type'];

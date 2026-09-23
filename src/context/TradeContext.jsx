@@ -667,11 +667,17 @@ export const TradeProvider = ({ children }) => {
             isPending: isTradePending,
             executedFromPending: t.executed_from_pending === 1,
             market: t.market_type || 'MCX',
+            market_type: t.market_type || 'MCX',
             username: t.username || 'Unknown',
             closed_by: t.closed_by || 'Unknown',
             closeRemark: t.close_remark || null,
             is_commodity: t.is_commodity === 1 || t.is_commodity === true || (t.market_type === 'COMMODITY') || (t.market_type === 'FOREX') || (t.market_type === 'CRYPTO'),
-            lot_size: Number(t.lot_size) || 1,
+            lot_size: Number(t.lot_size) || Number(t.lot_size_at_entry) || 1,
+            lot_size_at_entry: Number(t.lot_size_at_entry) || Number(t.lot_size) || 1,
+            actual_qty: (t.actual_qty !== undefined && t.actual_qty !== null) ? Number(t.actual_qty) : null,
+            qty_input: (t.qty_input !== undefined && t.qty_input !== null) ? Number(t.qty_input) : null,
+            trade_mode: t.trade_mode || null,
+            equity_units_mode: t.equity_units_mode !== undefined ? t.equity_units_mode : null,
             usdinr_value: Number(t.usdinr_value) || 95.1
         };
     };
