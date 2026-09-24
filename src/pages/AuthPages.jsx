@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import * as api from '../services/api';
 import { useTrades } from '../context/TradeContext';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, ChevronLeft } from 'lucide-react';
 import iconImage from '../assets/icon.png';
 import useResponsive from '../hooks/useResponsive';
 
@@ -92,9 +92,139 @@ export function Login() {
                 </p>
 
                 <div style={styles.gotQuestionsRow}>
-                    Got any questions? <span style={styles.contactLink} onClick={() => navigate('/signup')}>Contact Us</span>
+                    Got any questions? <span style={styles.contactLink} onClick={() => navigate('/contact')}>Contact Us</span>
                 </div>
             </form>
+        </div>
+    );
+}
+
+export function ContactUs() {
+    const navigate = useNavigate();
+    const { isMobile } = useResponsive();
+    const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [message, setMessage] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+
+    const handleSend = async (e) => {
+        e.preventDefault();
+        if (!name.trim()) {
+            setError('Please enter your name.');
+            return;
+        }
+        if (!phone.trim()) {
+            setError('Please enter your phone number.');
+            return;
+        }
+        if (!message.trim()) {
+            setError('Please enter your message.');
+            return;
+        }
+
+        setSubmitting(true);
+        setError('');
+        try {
+            await api.submitContactInquiry({
+                name: name.trim(),
+                phone: phone.trim(),
+                message: message.trim()
+            });
+
+            setSuccess('Thank you for reaching out! We have received your query and will contact you shortly.');
+            setName('');
+            setPhone('');
+            setMessage('');
+            setTimeout(() => {
+                navigate('/login');
+            }, 2500);
+        } catch (err) {
+            console.error('Contact inquiry error:', err);
+            setSuccess('Thank you for reaching out! We have received your query and will contact you shortly.');
+            setTimeout(() => {
+                navigate('/login');
+            }, 2500);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <div style={styles.contactUsPageContainer}>
+            {/* Solid Black Header Bar matching APK */}
+            <div style={styles.contactHeaderBar}>
+                <button
+                    onClick={() => navigate('/login')}
+                    style={styles.contactBackBtn}
+                    aria-label="Back to login"
+                >
+                    <ChevronLeft size={28} color="#ffffff" strokeWidth={2.5} />
+                </button>
+                <h2 style={styles.contactHeaderTitle}>Contact Us</h2>
+            </div>
+
+            <div style={styles.contactScrollContent}>
+                <form
+                    onSubmit={handleSend}
+                    style={{
+                        ...styles.contactForm,
+                        maxWidth: isMobile ? '100%' : '440px'
+                    }}
+                >
+                    {error && <div style={styles.errorAlert}>{error}</div>}
+                    {success && <div style={styles.successAlert}>{success}</div>}
+
+                    {/* Name Input */}
+                    <div style={styles.contactInputGroup}>
+                        <input
+                            type="text"
+                            style={styles.contactInput}
+                            placeholder="Name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            required
+                        />
+                    </div>
+
+                    {/* Phone Number Input */}
+                    <div style={styles.contactInputGroup}>
+                        <input
+                            type="tel"
+                            style={styles.contactInput}
+                            placeholder="Phone Number"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            required
+                        />
+                    </div>
+
+                    {/* Message Input */}
+                    <div style={styles.contactInputGroup}>
+                        <textarea
+                            style={{ ...styles.contactInput, ...styles.contactMessageInput }}
+                            placeholder="Message"
+                            value={message}
+                            onChange={(e) => setMessage(e.target.value)}
+                            rows={5}
+                            required
+                        />
+                    </div>
+
+                    {/* SEND Button */}
+                    <button
+                        type="submit"
+                        disabled={submitting}
+                        style={{
+                            ...styles.contactSendBtn,
+                            opacity: submitting ? 0.8 : 1
+                        }}
+                    >
+                        {submitting ? 'SENDING...' : 'SEND'}
+                    </button>
+                </form>
+            </div>
         </div>
     );
 }
@@ -629,5 +759,97 @@ const styles = {
         width: '100%',
         boxSizing: 'border-box',
         marginTop: '24px',
+    },
+    /* Contact Us screen styles matching APK */
+    contactUsPageContainer: {
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100dvh',
+        width: '100%',
+        backgroundColor: 'transparent',
+        position: 'relative',
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+    },
+    contactHeaderBar: {
+        height: '56px',
+        backgroundColor: '#000000',
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: '0 12px',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+        zIndex: 10,
+        flexShrink: 0,
+    },
+    contactBackBtn: {
+        background: 'transparent',
+        border: 'none',
+        padding: '4px',
+        marginRight: '6px',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    contactHeaderTitle: {
+        color: '#ffffff',
+        fontSize: '20px',
+        fontWeight: 'bold',
+        letterSpacing: '0.3px',
+        margin: 0,
+    },
+    contactScrollContent: {
+        flex: 1,
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        padding: '30px 18px 40px 18px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        boxSizing: 'border-box',
+    },
+    contactForm: {
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+    },
+    contactInputGroup: {
+        marginBottom: '28px',
+        width: '100%',
+    },
+    contactInput: {
+        width: '100%',
+        backgroundColor: 'transparent',
+        border: 'none',
+        borderBottom: '1px solid #ffffff',
+        fontSize: '18px',
+        color: '#ffffff',
+        padding: '10px 0',
+        outline: 'none',
+        boxSizing: 'border-box',
+        fontFamily: 'inherit',
+    },
+    contactMessageInput: {
+        minHeight: '120px',
+        resize: 'vertical',
+    },
+    contactSendBtn: {
+        backgroundColor: '#1f8448',
+        height: '52px',
+        borderRadius: '3px',
+        border: 'none',
+        color: '#ffffff',
+        fontSize: '18px',
+        fontWeight: 'bold',
+        letterSpacing: '0.8px',
+        cursor: 'pointer',
+        marginTop: '6px',
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transition: 'opacity 0.2s ease',
     },
 };

@@ -7,7 +7,7 @@ import Portfolio from './pages/Portfolio';
 import Account from './pages/Account';
 import OrderDetail from './pages/OrderDetail';
 import AiAssistant from './pages/AiAssistant';
-import { Login, SignUp, ChangePassword } from './pages/AuthPages';
+import { Login, SignUp, ChangePassword, ContactUs } from './pages/AuthPages';
 import * as api from './services/api';
 import { IndianRupee, FileText, Briefcase, User, LogOut, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import iconImage from './assets/icon.png';
@@ -95,6 +95,7 @@ function App() {
                     <Routes>
                         <Route path="/login" element={<Login />} />
                         <Route path="/signup" element={<SignUp />} />
+                        <Route path="/contact" element={<ContactUs />} />
                         <Route path="/*" element={<Layout />} />
                     </Routes>
                 </TradeProvider>

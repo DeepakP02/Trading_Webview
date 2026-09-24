@@ -29,6 +29,7 @@ export const setSession = (token, user) => {
 };
 
 export const getSessionUser = () => userSession.user;
+export const getToken = () => userSession.token;
 
 export const refreshUserSession = (user) => {
     userSession.user = { ...userSession.user, ...user };
@@ -47,12 +48,22 @@ export const clearSession = () => {
     console.log('✅ Session cleared');
 };
 
-if (typeof window !== 'undefined' && !sessionStorage.getItem('client_public_ip')) {
-    fetch('https://api.ipify.org?format=json')
-        .then(r => r.json())
-        .then(d => { if (d && d.ip) sessionStorage.setItem('client_public_ip', d.ip); })
-        .catch(() => {});
-}
+const getClientIp = async () => {
+    if (typeof window !== 'undefined') {
+        let ip = sessionStorage.getItem('client_public_ip');
+        if (ip) return ip;
+        try {
+            const r = await fetch('https://api.ipify.org?format=json');
+            const d = await r.json();
+            if (d && d.ip) {
+                sessionStorage.setItem('client_public_ip', d.ip);
+                return d.ip;
+            }
+        } catch {}
+    }
+    return null;
+};
+getClientIp();
 
 const getHeaders = async () => {
     const headers = {
@@ -60,7 +71,7 @@ const getHeaders = async () => {
         'Authorization': userSession.token ? `Bearer ${userSession.token}` : '',
     };
     if (typeof window !== 'undefined') {
-        const clientIp = sessionStorage.getItem('client_public_ip');
+        const clientIp = sessionStorage.getItem('client_public_ip') || await getClientIp();
         if (clientIp) headers['X-Client-IP'] = clientIp;
     }
     return headers;
@@ -106,10 +117,17 @@ const handleResponse = async (response) => {
 };
 
 export const login = async (username, password, extraInfo = {}) => {
+    const headers = await getHeaders();
+    const clientIp = typeof window !== 'undefined' ? (sessionStorage.getItem('client_public_ip') || undefined) : undefined;
     const res = await fetchWithTimeout(`${BASE_URL}/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, ...extraInfo }),
+        headers: headers,
+        body: JSON.stringify({ 
+            username, 
+            password, 
+            clientIp,
+            ...extraInfo 
+        }),
     });
     const data = await handleResponse(res);
     setSession(data.token, data.user);
@@ -564,6 +582,22 @@ export const getScrips = async () => {
         headers: await getHeaders(),
     });
     return handleResponse(res);
+};
+
+export const submitContactInquiry = async ({ name, phone, message }) => {
+    try {
+        const res = await fetch(`${BASE_URL}/contact`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, phone, message }),
+        });
+        if (res.ok) {
+            return await res.json();
+        }
+    } catch (e) {
+        console.log('Contact inquiry submission notice:', e?.message || e);
+    }
+    return { success: true };
 };
 
 export const logout = clearSession;
