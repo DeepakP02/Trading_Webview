@@ -931,7 +931,10 @@ function WithdrawView({ balance, requests, onSubmit, onBack }) {
                             type="number"
                             placeholder="0.00"
                             value={amount}
-                            onChange={e => setAmount(e.target.value)}
+                            onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                            onKeyDown={e => { if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault(); }}
+                            min="1"
+                            step="any"
                             style={styles.withdrawBigInput}
                             className="auth-input"
                         />

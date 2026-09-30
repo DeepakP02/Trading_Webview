@@ -62,6 +62,20 @@ const getLiveTradePnl = (trade, livePrices, getInstrumentMeta) => {
     return tradePL;
 };
 
+const getCreatorDisplay = (trade) => {
+    const role = (trade.created_by_role || '').toUpperCase();
+    if (role === 'SUPERADMIN' || (trade.created_by_name && trade.created_by_name.toLowerCase().includes('superadmin'))) {
+        return 'Super Admin';
+    }
+    if (role === 'ADMIN' || (trade.created_by_name && trade.created_by_name.toLowerCase().includes('admin'))) {
+        return 'Admin';
+    }
+    if (role === 'BROKER' || (trade.created_by_name && trade.created_by_name.toLowerCase().includes('broker'))) {
+        return 'Broker';
+    }
+    return trade.username || 'Trader';
+};
+
 export default function Trades() {
     const { isMobile } = useResponsive();
     const {
@@ -821,7 +835,7 @@ export default function Trades() {
                                     <div style={styles.closedPricesRow}>
                                         <div style={styles.priceInfo}>
                                             <span style={styles.priceLabel}>
-                                                {trade.type === 'BUY' ? `Bought By ${trade.username || 'testclient'}` : `Sold By ${trade.username || 'testclient'}`}
+                                                {trade.type === 'BUY' ? `Bought By ${getCreatorDisplay(trade)}` : `Sold By ${getCreatorDisplay(trade)}`}
                                             </span>
                                             <div style={styles.priceBoxRed}>
                                                 {formatPrice(trade.entryPrice)}

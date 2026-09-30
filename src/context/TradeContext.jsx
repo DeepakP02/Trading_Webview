@@ -6,33 +6,7 @@ import { calculateUsdPnL, calculateCryptoPnL, calculateForexPnL, calculateComexP
 import { calculateSegmentMargin, isMcxSymbol } from '../utils/segmentMargin';
 import * as api from '../services/api';
 
-const MOCK_WATCHLIST_DATA = [
-    // NFO_FUT
-    { symbol: 'NFO:NIFTY26APRFUT', name: 'NIFTY 26APR FUT', ltp: 17620, change: 0.45, category: 'NFO_FUT', exchange: 'NFO', type: 'NFO_FUT', lotSize: 50 },
-    { symbol: 'NFO:BANKNIFTY26APRFUT', name: 'BANKNIFTY 26APR FUT', ltp: 41250, change: -0.12, category: 'NFO_FUT', exchange: 'NFO', type: 'NFO_FUT', lotSize: 25 },
-    // NFO_OPT
-    { symbol: 'NFO:NIFTY26APR17500CE', name: 'NIFTY 26APR 17500 CE', ltp: 185, change: 12.5, category: 'NFO_OPT', exchange: 'NFO', type: 'NFO_OPT', strike: '17500', optionType: 'CE', lotSize: 50 },
-    { symbol: 'NFO:NIFTY26APR17500PE', name: 'NIFTY 26APR 17500 PE', ltp: 65, change: -8.3, category: 'NFO_OPT', exchange: 'NFO', type: 'NFO_OPT', strike: '17500', optionType: 'PE', lotSize: 50 },
-    // MCX_FUT
-    { symbol: 'MCX:CRUDEOIL26APRFUT', name: 'CRUDEOIL 26APR FUT', ltp: 6450, change: 1.25, category: 'MCX_FUT', exchange: 'MCX', type: 'MCX_FUT', lotSize: 100 },
-    { symbol: 'MCX:GOLD26APRFUT', name: 'GOLD 26APR FUT', ltp: 60210, change: 0.35, category: 'MCX_FUT', exchange: 'MCX', type: 'MCX_FUT', lotSize: 100 },
-    { symbol: 'MCX:SILVER26APRFUT', name: 'SILVER 26APR FUT', ltp: 74300, change: -0.65, category: 'MCX_FUT', exchange: 'MCX', type: 'MCX_FUT', lotSize: 30 },
-    // MCX_OPT
-    { symbol: 'MCX:CRUDEOIL26APR6000CE', name: 'CRUDEOIL 26APR 6000 CE', ltp: 480, change: 15.2, category: 'MCX_OPT', exchange: 'MCX', type: 'MCX_OPT', strike: '6000', optionType: 'CE', lotSize: 100 },
-    { symbol: 'MCX:CRUDEOIL26APR6000PE', name: 'CRUDEOIL 26APR 6000 PE', ltp: 120, change: -18.5, category: 'MCX_OPT', exchange: 'MCX', type: 'MCX_OPT', strike: '6000', optionType: 'PE', lotSize: 100 },
-    // CRYPTO
-    { symbol: 'CRYPTO:BTCUSDT', name: 'BTC/USDT', ltp: 28450, change: 2.15, category: 'CRYPTO', exchange: 'CRYPTO', type: 'CRYPTO', lotSize: 1 },
-    { symbol: 'CRYPTO:ETHUSDT', name: 'ETH/USDT', ltp: 1860, change: 1.85, category: 'CRYPTO', exchange: 'CRYPTO', type: 'CRYPTO', lotSize: 1 },
-    { symbol: 'CRYPTO:SOLUSDT', name: 'SOL/USDT', ltp: 22.4, change: -3.4, category: 'CRYPTO', exchange: 'CRYPTO', type: 'CRYPTO', lotSize: 1 },
-    // FOREX
-    { symbol: 'FOREX:EURUSD', name: 'EUR/USD', ltp: 1.0950, change: 0.12, category: 'FOREX', exchange: 'FOREX', type: 'FOREX', lotSize: 1000 },
-    { symbol: 'FOREX:GBPUSD', name: 'GBP/USD', ltp: 1.2420, change: -0.05, category: 'FOREX', exchange: 'FOREX', type: 'FOREX', lotSize: 1000 },
-    { symbol: 'FOREX:USDINR', name: 'USD/INR', ltp: 82.15, change: 0.08, category: 'FOREX', exchange: 'FOREX', type: 'FOREX', lotSize: 1000 },
-    // COMMODITY
-    { symbol: 'COMMODITY:USOIL', name: 'USOIL', ltp: 80.45, change: 1.15, category: 'COMMODITY', exchange: 'COMMODITY', type: 'COMMODITY', lotSize: 10 },
-    { symbol: 'COMMODITY:XAUUSD', name: 'XAU/USD', ltp: 2010.50, change: 0.42, category: 'COMMODITY', exchange: 'COMMODITY', type: 'COMMODITY', lotSize: 10 },
-    { symbol: 'COMMODITY:COPPER', name: 'COPPER', ltp: 13393.09, change: -0.32, category: 'COMMODITY', exchange: 'COMMODITY', type: 'COMMODITY', lotSize: 2500 },
-];
+const MOCK_WATCHLIST_DATA = [];
 
 const TradeContext = createContext();
 
@@ -495,18 +469,9 @@ export const TradeProvider = ({ children }) => {
                 const updated = [...prev];
 
                 dataToMap.forEach(item => {
-                    const cleanSym = item.symbol.replace(/:/g, '').toUpperCase();
-                    const isMetal = cleanSym === 'XAUUSD' || cleanSym === 'XAGUSD' || cleanSym === 'XAU/USD' || cleanSym === 'XAG/USD';
-                    const prefix = isMetal ? 'COMMODITY' : basePrefix;
-                    const cat = isMetal ? 'COMMODITY' : baseCat;
-
-                    let symbol = item.symbol;
-                    if (isMetal) {
-                        const rawSym = symbol.includes(':') ? symbol.split(':')[1] : symbol;
-                        symbol = `COMMODITY:${rawSym}`;
-                    } else {
-                        symbol = item.symbol.includes(':') ? item.symbol : `${prefix}:${item.symbol}`;
-                    }
+                    const prefix = basePrefix;
+                    const cat = baseCat;
+                    const symbol = item.symbol.includes(':') ? item.symbol : `${prefix}:${item.symbol}`;
                     const displayName = (item.name || item.symbol).replace(/:/g, '/');
                     const normKey = normalizeSymbol(displayName);
 
@@ -669,6 +634,9 @@ export const TradeProvider = ({ children }) => {
             market: t.market_type || 'MCX',
             market_type: t.market_type || 'MCX',
             username: t.username || 'Unknown',
+            created_by: t.created_by || null,
+            created_by_name: t.created_by_name || null,
+            created_by_role: t.created_by_role || null,
             closed_by: t.closed_by || 'Unknown',
             closeRemark: t.close_remark || null,
             is_commodity: t.is_commodity === 1 || t.is_commodity === true || (t.market_type === 'COMMODITY') || (t.market_type === 'FOREX') || (t.market_type === 'CRYPTO'),
@@ -792,34 +760,9 @@ export const TradeProvider = ({ children }) => {
                         // Standardize colons to slashes for saved watchlists as well
                         const mapped = savedWatchlist.map(s => s.replace(/:/g, '/'));
                         setIncludedPins(new Set(mapped));
-                        return true;
-                    }
-                    return false;
-                }).then(hasPins => {
-                    if (!hasPins) {
-                        const defaultPins = [
-                            'NIFTY 26APR FUT', 'BANKNIFTY 26APR FUT',
-                            'NIFTY 26APR 17500 CE', 'NIFTY 26APR 17500 PE',
-                            'CRUDEOIL 26APR FUT', 'GOLD 26APR FUT', 'SILVER 26APR FUT',
-                            'CRUDEOIL 26APR 6000 CE', 'CRUDEOIL 26APR 6000 PE',
-                            'BTC/USDT', 'ETH/USDT', 'SOL/USDT',
-                            'EUR/USD', 'GBP/USD', 'USD/INR',
-                            'USOIL', 'XAU/USD'
-                        ];
-                        setIncludedPins(new Set(defaultPins));
                     }
                 }).catch(wlErr => {
-                    console.log('ℹ️ No saved watchlist found, using defaults:', wlErr.message);
-                    const defaultPins = [
-                        'NIFTY 26APR FUT', 'BANKNIFTY 26APR FUT',
-                        'NIFTY 26APR 17500 CE', 'NIFTY 26APR 17500 PE',
-                        'CRUDEOIL 26APR FUT', 'GOLD 26APR FUT', 'SILVER 26APR FUT',
-                        'CRUDEOIL 26APR 6000 CE', 'CRUDEOIL 26APR 6000 PE',
-                        'BTC/USDT', 'ETH/USDT', 'SOL/USDT',
-                        'EUR/USD', 'GBP/USD', 'USD/INR',
-                        'USOIL', 'XAU/USD'
-                    ];
-                    setIncludedPins(new Set(defaultPins));
+                    console.log('ℹ️ Watchlist fetch error:', wlErr.message);
                 }),
                 api.getAlerts().then(alerts => {
                     if (alerts) {
@@ -1745,18 +1688,9 @@ export const TradeProvider = ({ children }) => {
 
                 const mapExtra = (items, prefix, catName) => {
                     items.forEach(item => {
-                        const cleanSym = item.symbol.replace(/:/g, '').toUpperCase();
-                        const isMetal = cleanSym === 'XAUUSD' || cleanSym === 'XAGUSD' || cleanSym === 'XAU/USD' || cleanSym === 'XAG/USD';
-                        const itemPrefix = isMetal ? 'COMMODITY' : prefix;
-                        const itemCat = isMetal ? 'COMMODITY' : catName;
-
-                        let symbol = item.symbol;
-                        if (isMetal) {
-                            const rawSym = symbol.includes(':') ? symbol.split(':')[1] : symbol;
-                            symbol = `COMMODITY:${rawSym}`;
-                        } else {
-                            symbol = item.symbol.includes(':') ? item.symbol : `${itemPrefix}:${item.symbol}`;
-                        }
+                        const itemPrefix = prefix;
+                        const itemCat = catName;
+                        const symbol = item.symbol.includes(':') ? item.symbol : `${itemPrefix}:${item.symbol}`;
                         const displayName = (item.name || item.symbol).replace(/:/g, '/');
                         const normKey = normalizeSymbol(displayName);
                         const price = parseFloat(item.ltp || item.price) || 0;

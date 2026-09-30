@@ -328,11 +328,7 @@ export default function Dashboard() {
 
     // Helper: categorize item to a tab — matches app SearchScreen.js exactly
     const getItemTab = (item) => {
-        const name = String(item.name || '').toUpperCase();
-        if (name === 'XAU/USD' || name === 'XAG/USD' || name === 'XAUUSD' || name === 'XAGUSD') {
-            return 'COMMODITY';
-        }
-        const sym = (item.symbol || item.fullSymbol || '').toUpperCase();
+        const sym = (item.symbol || item.fullSymbol || item.name || '').toUpperCase();
         if (sym.startsWith('CRYPTO:')) return 'CRYPTO';
         if (sym.startsWith('FOREX:')) return 'FOREX';
         if (sym.startsWith('COMMODITY:')) return 'COMMODITY';

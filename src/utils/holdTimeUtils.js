@@ -113,15 +113,26 @@ export function detectSegment(symbol, market) {
  */
 export function getMinHoldTimeSeconds(segment, userConfig) {
     if (!userConfig) return 0;
-    let t = 0;
-    if (segment === 'OPTIONS') t = parseInt(userConfig.optionsMinTimeToBookProfit || 0);
-    else if (segment === 'MCX') t = parseInt(userConfig.mcxMinTimeToBookProfit || 0);
-    else if (segment === 'EQUITY') t = parseInt(userConfig.equityMinTimeToBookProfit || 0);
-    else if (segment === 'CRYPTO') t = parseInt(userConfig.cryptoConfig?.minTimeToBookProfit || userConfig.cryptoMinTimeToBookProfit || 0);
-    else if (segment === 'FOREX') t = parseInt(userConfig.forexConfig?.minTimeToBookProfit || userConfig.forexMinTimeToBookProfit || 0);
-    else if (segment === 'COMEX') t = parseInt(userConfig.comexConfig?.minTimeToBookProfit || userConfig.comexMinTimeToBookProfit || 0);
-    if (!t) t = parseInt(userConfig.min_time_to_book_profit || userConfig.minTimeToBookProfit || 0);
-    return t || 0;
+    let val = undefined;
+    if (segment === 'OPTIONS') val = userConfig.optionsMinTimeToBookProfit;
+    else if (segment === 'MCX') val = userConfig.mcxMinTimeToBookProfit;
+    else if (segment === 'EQUITY') val = userConfig.equityMinTimeToBookProfit;
+    else if (segment === 'CRYPTO') val = userConfig.cryptoConfig?.minTimeToBookProfit ?? userConfig.cryptoMinTimeToBookProfit;
+    else if (segment === 'FOREX') val = userConfig.forexConfig?.minTimeToBookProfit ?? userConfig.forexMinTimeToBookProfit;
+    else if (segment === 'COMEX') val = userConfig.comexConfig?.minTimeToBookProfit ?? userConfig.comexMinTimeToBookProfit;
+
+    if (val !== undefined && val !== null && val !== '') {
+        const parsed = parseInt(val, 10);
+        return isNaN(parsed) ? 0 : Math.max(0, parsed);
+    }
+
+    const fallback = userConfig.min_time_to_book_profit ?? userConfig.minTimeToBookProfit;
+    if (fallback !== undefined && fallback !== null && fallback !== '') {
+        const parsed = parseInt(fallback, 10);
+        return isNaN(parsed) ? 0 : Math.max(0, parsed);
+    }
+
+    return 0;
 }
 
 /**
