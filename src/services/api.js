@@ -457,7 +457,14 @@ export const aiParseOnly = async (text) => {
 
 export const aiTranscribeVoice = async (audioBlob) => {
     const formData = new FormData();
-    formData.append('audio', audioBlob, 'voice.wav');
+    const blobType = (audioBlob && audioBlob.type) ? audioBlob.type.toLowerCase() : '';
+    let ext = 'webm';
+    if (blobType.includes('wav')) ext = 'wav';
+    else if (blobType.includes('mp4') || blobType.includes('m4a')) ext = 'm4a';
+    else if (blobType.includes('mp3') || blobType.includes('mpeg')) ext = 'mp3';
+    else if (blobType.includes('ogg')) ext = 'ogg';
+
+    formData.append('audio', audioBlob, `voice.${ext}`);
     
     const headers = await getHeaders();
     delete headers['Content-Type'];
