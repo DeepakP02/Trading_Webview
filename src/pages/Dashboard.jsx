@@ -559,7 +559,7 @@ export default function Dashboard() {
 
                         {/* Search bar placeholder */}
                         <div style={styles.searchBarRow}>
-                            <div onClick={() => { setPrevCategory(selectedCategory); setIsSearching(true); }} style={{ flex: 1, height: '40px', backgroundColor: 'rgba(255, 255, 255, 0.07)', borderRadius: '8px', display: 'flex', alignItems: 'center', padding: '0 12px', border: '1px solid rgba(255, 255, 255, 0.08)', cursor: 'pointer' }}>
+                            <div onClick={() => { setPrevCategory(selectedCategory); setSearchTab(selectedCategory); setIsSearching(true); }} style={{ flex: 1, height: '40px', backgroundColor: 'rgba(255, 255, 255, 0.07)', borderRadius: '8px', display: 'flex', alignItems: 'center', padding: '0 12px', border: '1px solid rgba(255, 255, 255, 0.08)', cursor: 'pointer' }}>
                                 <Search size={18} color="#9E9E9E" style={{ marginRight: '8px' }} />
                                 <span style={styles.searchPlaceholder}>Search & Add</span>
                             </div>
@@ -608,7 +608,7 @@ export default function Dashboard() {
                                     <p style={styles.emptySubtitle}>
                                         Use Search to add {CAT_LABEL[selectedCategory]} instruments
                                     </p>
-                                    <button onClick={() => setIsSearching(true)} style={styles.blueSearchBtn}>
+                                    <button onClick={() => { setPrevCategory(selectedCategory); setSearchTab(selectedCategory); setIsSearching(true); }} style={styles.blueSearchBtn}>
                                         ＋ Search & Add
                                     </button>
                                 </div>
