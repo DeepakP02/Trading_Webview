@@ -600,11 +600,18 @@ export const TradeProvider = ({ children }) => {
             }
         }
 
-        const isTradeCompleted =
-            t.status === 'CLOSED' ||
-            t.status === 'COMPLETED' ||
-            t.is_completed === 1 ||
-            (t.exit_price !== null && t.exit_price !== undefined && t.exit_price !== '');
+        // OPEN and HOLD stay on the active list. An expired contract can have
+        // exit_price 0 or an empty quote for the 24h hold; that is not a close.
+        const tradeStatus = String(t.status || '').toUpperCase();
+        const stillWorking = tradeStatus === 'OPEN' || tradeStatus === 'HOLD' || tradeStatus === 'PENDING';
+        const isTradeCompleted = !stillWorking && (
+            tradeStatus === 'CLOSED' ||
+            tradeStatus === 'COMPLETED' ||
+            tradeStatus === 'CANCELLED' ||
+            tradeStatus === 'SETTLED' ||
+            tradeStatus === 'WEEKLY SETTLED' ||
+            t.is_completed === 1
+        );
 
         const isTradePending = t.status === 'PENDING' || t.is_pending === 1;
 
@@ -617,7 +624,7 @@ export const TradeProvider = ({ children }) => {
             type: t.type,
             qty: (t.qty || 1).toString(),
             entryPrice: (t.entry_price || 0).toString(),
-            exitPrice: t.exit_price ? t.exit_price.toString() : null,
+            exitPrice: (!stillWorking && t.exit_price) ? t.exit_price.toString() : null,
             margin_used: Number(t.margin_used) || 0,
             pnl: Number(t.pnl) || 0,
             stop_loss: t.stop_loss || null,
@@ -896,15 +903,18 @@ export const TradeProvider = ({ children }) => {
     };
 
     const cancelTrade = async (id) => {
-        const tradeToCancel = trades.find(t => t.id === id);
-        if (!tradeToCancel) throw new Error('Trade not found');
+        const idStr = id == null ? '' : String(id);
+        const tradeToCancel = trades.find(t => String(t.id) === idStr);
+        if (!/^\d+$/.test(idStr)) throw new Error('Trade not found');
 
         try {
-            await api.closeTrade(id, 0);
-            setTrades(prev => prev.filter(t => t.id !== id));
+            await api.closeTrade(idStr, 0);
+            setTrades(prev => prev.filter(t => String(t.id) !== idStr));
             addNotification({
                 title: 'Order Cancelled',
-                message: `Your ${tradeToCancel.type} order for ${tradeToCancel.displayName} has been cancelled.`,
+                message: tradeToCancel
+                    ? `Your ${tradeToCancel.type} order for ${tradeToCancel.displayName} has been cancelled.`
+                    : 'Order cancelled.',
                 type: 'success'
             });
             await refreshBalance();
@@ -1845,9 +1855,9 @@ export const TradeProvider = ({ children }) => {
         if (!api.hasSession()) return;
         try {
             const allTrades = await api.getTrades('');
-            if (allTrades && Array.isArray(allTrades)) {
-                setTrades(allTrades.filter(t => t.status !== 'DELETED').map(mapApiTrade));
-            }
+            const list = Array.isArray(allTrades) ? allTrades : (Array.isArray(allTrades?.data) ? allTrades.data : null);
+            if (!list) return;
+            setTrades(list.filter(t => t.status !== 'DELETED').map(mapApiTrade));
         } catch {}
     };
 
