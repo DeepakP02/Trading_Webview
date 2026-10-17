@@ -14,7 +14,8 @@ export const isMcxSymbol = (symbol = '') => {
   const clean = sym.split(':').pop().replace(/[0-9]+[A-Z]*/g, '').replace(/FUT$/i, '').trim();
   return sym.startsWith('MCX:') ||
     ['GOLD', 'SILVER', 'CRUDEOIL', 'NATURALGAS', 'COPPER', 'ZINC', 'NICKEL', 'LEAD',
-     'ALUMINIUM', 'MENTHAOIL', 'COTTON', 'BULLDEX', 'MCRUDEOIL', 'MNATURALGAS', 'MGOLD', 'MSILVER', 'SILVERMIC'].some(k => clean.startsWith(k));
+     'ALUMINIUM', 'MENTHAOIL', 'COTTON', 'BULLDEX', 'MCRUDEOIL', 'MNATURALGAS', 'MGOLD', 'MSILVER', 'SILVERMIC',
+     'MCOPPER', 'MLEAD', 'MZINC', 'MALUMINIUM', 'MNICKEL'].some(k => clean.startsWith(k));
 };
 
 export const isOptionsSymbol = (symbol = '') => {

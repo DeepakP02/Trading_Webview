@@ -7,6 +7,7 @@ import * as api from '../services/api';
 import useResponsive from '../hooks/useResponsive';
 import TradeWarningPopup from '../components/TradeWarningPopup';
 import { checkHoldTimeAllowed, isSameInstrument, detectSegment, getMinHoldTimeSeconds, getSecondsHeld } from '../utils/holdTimeUtils';
+import { isMcxSymbol } from '../utils/segmentMargin';
 
 const formatSymbolName = (name) => {
     if (!name) return '';
@@ -37,8 +38,11 @@ const getLiveTradePnl = (trade, livePrices, getInstrumentMeta) => {
     let tradePL = 0;
     const meta = getInstrumentMeta ? getInstrumentMeta(trade.name, trade.market) : null;
     const multiplier = meta?.multiplier || 1;
+    const market = (trade.market || trade.market_type || '').toUpperCase();
+    const usdSegment = market === 'COMMODITY' || market === 'COMEX' || market === 'FOREX' || market === 'CRYPTO';
+    const isMcx = !usdSegment && (market === 'MCX' || isMcxSymbol(trade.name || trade.fullSymbol || ''));
 
-    if (trade.is_commodity) {
+    if (trade.is_commodity && !isMcx) {
         const lotSize = Number(trade.lot_size) || 1;
         const fallbackUsdInr = Number(trade.usdinr_value) || 95.1;
         const usdInrLive = livePrices['USD/INR'] || livePrices['USDINR'];

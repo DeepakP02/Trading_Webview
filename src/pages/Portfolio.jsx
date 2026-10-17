@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTrades, normalizeSymbol, getLivePriceObject } from '../context/TradeContext';
-import { calculateSegmentMargin } from '../utils/segmentMargin';
+import { calculateSegmentMargin, isMcxSymbol } from '../utils/segmentMargin';
 import { formatPrice } from '../utils/formatPrice';
 import { X, ChevronLeft, RefreshCw } from 'lucide-react';
 import useResponsive from '../hooks/useResponsive';
@@ -116,7 +116,10 @@ export default function Portfolio() {
         const isBuy = selectedTrade.type === 'BUY';
         const exitPrice = isBuy ? bidVal : askVal;
 
-        const isCommodity = selectedTrade.is_commodity || (selectedTrade.market === 'COMMODITY');
+        const market = (selectedTrade.market_type || selectedTrade.market || '').toUpperCase();
+        const usdSegment = market === 'COMMODITY' || market === 'COMEX' || market === 'FOREX' || market === 'CRYPTO';
+        const isMcx = !usdSegment && (market === 'MCX' || isMcxSymbol(selectedTrade.name || selectedTrade.symbol || ''));
+        const isCommodity = !isMcx && (selectedTrade.is_commodity || (selectedTrade.market === 'COMMODITY'));
         const fallbackUsdInr = Number(selectedTrade.usdinr_value) || 95.1;
         const usdInrLive = livePrices['USD/INR'] || livePrices['USDINR'];
         const liveBid = usdInrLive ? parseFloat(usdInrLive.bid) || null : null;

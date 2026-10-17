@@ -32,13 +32,20 @@ export const INSTRUMENT_META = {
     'SILVERMIC': { multiplier: 1, market: 'MCX' },
     'COPPER': { multiplier: 2500, market: 'MCX' },
     'COPPERM': { multiplier: 250, market: 'MCX' },
+    'MCOPPER': { multiplier: 250, market: 'MCX' },
     'ZINC': { multiplier: 5000, market: 'MCX' },
     'ZINCMINI': { multiplier: 1000, market: 'MCX' },
+    'MZINC': { multiplier: 1000, market: 'MCX' },
     'NICKEL': { multiplier: 1500, market: 'MCX' },
+    'NICKELMINI': { multiplier: 100, market: 'MCX' },
+    'MNICKEL': { multiplier: 100, market: 'MCX' },
     'LEAD': { multiplier: 5000, market: 'MCX' },
     'LEADMINI': { multiplier: 1000, market: 'MCX' },
+    'MLEAD': { multiplier: 1000, market: 'MCX' },
     'ALUMINIUM': { multiplier: 5000, market: 'MCX' },
+    'ALUMINI': { multiplier: 1000, market: 'MCX' },
     'ALUMINIUMM': { multiplier: 1000, market: 'MCX' },
+    'MALUMINIUM': { multiplier: 1000, market: 'MCX' },
     'TCS': { multiplier: 1, market: 'NSE' },
     'RELIANCE': { multiplier: 1, market: 'NSE' },
     'SBIN': { multiplier: 1, market: 'NSE' },
@@ -1261,8 +1268,11 @@ export const TradeProvider = ({ children }) => {
 
             const exitPrice = trade.type === 'BUY' ? bid : ask;
             const mType = (trade.market || trade.market_type || '').toUpperCase();
+            const usdSegment = mType === 'COMMODITY' || mType === 'COMEX' || mType === 'FOREX' || mType === 'CRYPTO';
+            const isMcxTrade = !usdSegment && (mType === 'MCX' || isMcxSymbol(trade.name || trade.fullSymbol || ''));
             let tradePL = 0;
-            if (trade.is_commodity) {
+            // MCX minis such as MCOPPER sit in the commodity lot table, but their PnL is INR.
+            if (trade.is_commodity && !isMcxTrade) {
                 const lotSize = Number(trade.lot_size) || 1;
                 const fallbackUsdInr = Number(trade.usdinr_value) || 95.1;
                 const usdInrLive = livePrices['USD/INR'] || livePrices['USDINR'];
@@ -1283,8 +1293,11 @@ export const TradeProvider = ({ children }) => {
             } else {
                 const hardcodedMult = getHardcodedMultiplier(trade.name) || getHardcodedMultiplier(trade.fullSymbol);
                 const dbLotVal = getDbLotSize(trade.name) || getDbLotSize(trade.fullSymbol);
-                const lotSize = parseFloat(trade.lot_size || dbLotVal || trade.lot_size_at_entry || (hardcodedMult > 1 ? hardcodedMult : null) || positions[key]?.hardcodedMultiplier || 1);
-                const isMcxTrade = mType === 'MCX' || isMcxSymbol(trade.name || trade.fullSymbol || '');
+                let lotSize = parseFloat(trade.lot_size || dbLotVal || trade.lot_size_at_entry || (hardcodedMult > 1 ? hardcodedMult : null) || positions[key]?.hardcodedMultiplier || 1);
+                // A mis-tagged MCX mini can arrive with Copper's 2500 lot. Use the MCX lot instead.
+                if (trade.is_commodity && isMcxTrade && hardcodedMult > 1) {
+                    lotSize = hardcodedMult;
+                }
                 if (isMcxTrade) {
                     tradePL = calculateMcxPnL({
                         type: trade.type,
