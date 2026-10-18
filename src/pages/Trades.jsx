@@ -24,15 +24,26 @@ const formatSymbolName = (name) => {
     return cleanName;
 };
 
+const carriedBaseline = (trade, entry) => {
+    const status = String(trade?.status || '').toUpperCase();
+    const carried = status === 'HOLD'
+        || trade?.is_carried_forward === 1
+        || trade?.is_carried_forward === true
+        || trade?.is_carried_forward === '1';
+    const settlement = parseFloat(trade?.last_settlement_price);
+    if (carried && Number.isFinite(settlement) && settlement > 0) return settlement;
+    return entry;
+};
+
 const getLiveTradePnl = (trade, livePrices, getInstrumentMeta) => {
     if (!trade) return 0;
     const normKey = normalizeSymbol ? normalizeSymbol(trade.name) : trade.name.toLowerCase();
     const liveData = livePrices[normKey] || {};
-    const ltp = liveData.ltp || parseFloat(trade.exitPrice) || parseFloat(trade.entryPrice) || 0;
+    const entry = carriedBaseline(trade, parseFloat(trade.entryPrice) || 0);
+    const ltp = liveData.ltp || parseFloat(trade.exitPrice) || entry;
     const bid = liveData.bid || ltp;
     const ask = liveData.ask || ltp;
     const currentPrice = trade.type === 'BUY' ? bid : ask;
-    const entry = parseFloat(trade.entryPrice) || 0;
     const qty = parseFloat(trade.qty) || 1;
 
     let tradePL = 0;

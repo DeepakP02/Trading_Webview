@@ -125,9 +125,10 @@ export default function Portfolio() {
         const liveBid = usdInrLive ? parseFloat(usdInrLive.bid) || null : null;
         const liveAsk = usdInrLive ? parseFloat(usdInrLive.ask) || null : null;
 
+        const pnlPrice = selectedTrade.pnlBaseline != null ? Number(selectedTrade.pnlBaseline) : selectedTrade.avgPrice;
         const rawPnl = isCommodity
-            ? (exitPrice - selectedTrade.avgPrice) * selectedTrade.qty * lotSizeVal * (isBuy ? 1 : -1)
-            : (exitPrice - selectedTrade.avgPrice) * selectedTrade.qty * selectedTrade.hardcodedMultiplier * (isBuy ? 1 : -1);
+            ? (exitPrice - pnlPrice) * selectedTrade.qty * lotSizeVal * (isBuy ? 1 : -1)
+            : (exitPrice - pnlPrice) * selectedTrade.qty * selectedTrade.hardcodedMultiplier * (isBuy ? 1 : -1);
 
         let usdInrAdjusted = 1;
         if (isCommodity) {

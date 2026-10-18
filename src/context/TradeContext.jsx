@@ -631,6 +631,11 @@ export const TradeProvider = ({ children }) => {
             type: t.type,
             qty: (t.qty || 1).toString(),
             entryPrice: (t.entry_price || 0).toString(),
+            status: tradeStatus,
+            is_carried_forward: t.is_carried_forward === 1 || t.is_carried_forward === true || t.is_carried_forward === '1' || tradeStatus === 'HOLD',
+            last_settlement_price: (t.last_settlement_price !== null && t.last_settlement_price !== undefined && t.last_settlement_price !== '')
+                ? Number(t.last_settlement_price)
+                : null,
             exitPrice: (!stillWorking && t.exit_price) ? t.exit_price.toString() : null,
             margin_used: Number(t.margin_used) || 0,
             pnl: Number(t.pnl) || 0,
@@ -1197,6 +1202,17 @@ export const TradeProvider = ({ children }) => {
         return INSTRUMENT_META[baseSymbol]?.multiplier || 1;
     };
 
+    const carriedBaseline = (trade, entry) => {
+        const status = String(trade?.status || '').toUpperCase();
+        const carried = status === 'HOLD'
+            || trade?.is_carried_forward === 1
+            || trade?.is_carried_forward === true
+            || trade?.is_carried_forward === '1';
+        const settlement = parseFloat(trade?.last_settlement_price);
+        if (carried && Number.isFinite(settlement) && settlement > 0) return settlement;
+        return entry;
+    };
+
     const aggregatedPositions = useMemo(() => {
         const activeTrades = trades.filter(t => !t.isCompleted && !t.isPending);
         const positions = {};
@@ -1214,6 +1230,10 @@ export const TradeProvider = ({ children }) => {
                     totalSellQty: 0,
                     totalBuyCost: 0,
                     totalSellCost: 0,
+                    pnlBuyQty: 0,
+                    pnlSellQty: 0,
+                    pnlBuyCost: 0,
+                    pnlSellCost: 0,
                     totalHoldingMargin: 0,
                     totalPL: 0,
                     hardcodedMultiplier: hardcodedMultiplier,
@@ -1232,6 +1252,7 @@ export const TradeProvider = ({ children }) => {
             const side = trade.type === 'BUY' ? 1 : -1;
             const qty = Number(trade.qty) || 0;
             const entry = Number(trade.entryPrice) || 0;
+            const pnlEntry = carriedBaseline(trade, entry);
             const margin = Number(trade.margin_used) || 0;
 
             positions[key].netQty += (side * qty);
@@ -1241,9 +1262,13 @@ export const TradeProvider = ({ children }) => {
             if (trade.type === 'BUY') {
                 positions[key].totalBuyQty += qty;
                 positions[key].totalBuyCost += (qty * entry);
+                positions[key].pnlBuyQty += qty;
+                positions[key].pnlBuyCost += (qty * pnlEntry);
             } else {
                 positions[key].totalSellQty += qty;
                 positions[key].totalSellCost += (qty * entry);
+                positions[key].pnlSellQty += qty;
+                positions[key].pnlSellCost += (qty * pnlEntry);
             }
 
             // Calculate holding/used margin for this trade using standard segment margin helper
@@ -1262,7 +1287,7 @@ export const TradeProvider = ({ children }) => {
 
             const liveData = getLivePriceObject(trade.name, livePrices) || getLivePriceObject(trade.displayName, livePrices) || {};
             const liveLtp = parseFloat(liveData.ltp || 0);
-            const ltp = liveLtp > 0 ? liveLtp : (Number(trade.entryPrice) || 0);
+            const ltp = liveLtp > 0 ? liveLtp : pnlEntry;
             const bid = (liveData && parseFloat(liveData.bid) > 0) ? parseFloat(liveData.bid) : ltp;
             const ask = (liveData && parseFloat(liveData.ask) > 0) ? parseFloat(liveData.ask) : ltp;
 
@@ -1282,11 +1307,11 @@ export const TradeProvider = ({ children }) => {
                 const tradeSym = trade.name || trade.symbol || '';
                 let calcRes;
                 if (mType === 'CRYPTO') {
-                    calcRes = calculateCryptoPnL({ symbol: tradeSym, type: trade.type, entryPrice: entry, exitPrice: exitPrice, qty: qty, qtyInput: trade.qty_input, lotSize, fallbackUsdInr, liveBid, liveAsk });
+                    calcRes = calculateCryptoPnL({ symbol: tradeSym, type: trade.type, entryPrice: pnlEntry, exitPrice: exitPrice, qty: qty, qtyInput: trade.qty_input, lotSize, fallbackUsdInr, liveBid, liveAsk });
                 } else if (mType === 'FOREX') {
-                    calcRes = calculateForexPnL({ symbol: tradeSym, type: trade.type, entryPrice: entry, exitPrice: exitPrice, qty: qty, qtyInput: trade.qty_input, lotSize, fallbackUsdInr, liveBid, liveAsk });
+                    calcRes = calculateForexPnL({ symbol: tradeSym, type: trade.type, entryPrice: pnlEntry, exitPrice: exitPrice, qty: qty, qtyInput: trade.qty_input, lotSize, fallbackUsdInr, liveBid, liveAsk });
                 } else {
-                    calcRes = calculateComexPnL({ symbol: tradeSym, type: trade.type, entryPrice: entry, exitPrice: exitPrice, qty: qty, qtyInput: trade.qty_input, lotSize, fallbackUsdInr, liveBid, liveAsk });
+                    calcRes = calculateComexPnL({ symbol: tradeSym, type: trade.type, entryPrice: pnlEntry, exitPrice: exitPrice, qty: qty, qtyInput: trade.qty_input, lotSize, fallbackUsdInr, liveBid, liveAsk });
                 }
 
                 tradePL = calcRes.pnlInr;
@@ -1301,7 +1326,7 @@ export const TradeProvider = ({ children }) => {
                 if (isMcxTrade) {
                     tradePL = calculateMcxPnL({
                         type: trade.type,
-                        entryPrice: entry,
+                        entryPrice: pnlEntry,
                         exitPrice: exitPrice,
                         qty: qty,
                         qtyInput: trade.qty_input,
@@ -1310,7 +1335,7 @@ export const TradeProvider = ({ children }) => {
                 } else {
                     tradePL = calculateEquityPnL({
                         type: trade.type,
-                        entryPrice: entry,
+                        entryPrice: pnlEntry,
                         exitPrice: exitPrice,
                         qty: qty,
                         qtyInput: trade.qty_input,
@@ -1339,12 +1364,16 @@ export const TradeProvider = ({ children }) => {
             let avgPrice = isBuyPosition
                 ? (pos.totalBuyQty > 0 ? pos.totalBuyCost / pos.totalBuyQty : 0)
                 : (pos.totalSellQty > 0 ? pos.totalSellCost / pos.totalSellQty : 0);
+            const pnlBaseline = isBuyPosition
+                ? (pos.pnlBuyQty > 0 ? pos.pnlBuyCost / pos.pnlBuyQty : avgPrice)
+                : (pos.pnlSellQty > 0 ? pos.pnlSellCost / pos.pnlSellQty : avgPrice);
 
             return {
                 ...pos,
                 qty: qty,
                 type: type,
                 avgPrice,
+                pnlBaseline,
                 entryPrice: avgPrice.toFixed(2),
                 pnl: pos.totalPL,
                 margin_used: pos.totalHoldingMargin,
