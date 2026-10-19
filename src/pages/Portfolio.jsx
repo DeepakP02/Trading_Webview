@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTrades, normalizeSymbol, getLivePriceObject } from '../context/TradeContext';
 import { calculateSegmentMargin, isMcxSymbol } from '../utils/segmentMargin';
+import { findUsdInrQuote } from '../utils/usdPnL';
 import { formatPrice } from '../utils/formatPrice';
 import { X, ChevronLeft, RefreshCw } from 'lucide-react';
 import useResponsive from '../hooks/useResponsive';
@@ -121,9 +122,9 @@ export default function Portfolio() {
         const isMcx = !usdSegment && (market === 'MCX' || isMcxSymbol(selectedTrade.name || selectedTrade.symbol || ''));
         const isCommodity = !isMcx && (selectedTrade.is_commodity || (selectedTrade.market === 'COMMODITY'));
         const fallbackUsdInr = Number(selectedTrade.usdinr_value) || 95.1;
-        const usdInrLive = livePrices['USD/INR'] || livePrices['USDINR'];
-        const liveBid = usdInrLive ? parseFloat(usdInrLive.bid) || null : null;
-        const liveAsk = usdInrLive ? parseFloat(usdInrLive.ask) || null : null;
+        const usdInrLive = findUsdInrQuote(livePrices);
+        const liveBid = usdInrLive ? parseFloat(usdInrLive.bid) || 0 : 0;
+        const liveAsk = usdInrLive ? parseFloat(usdInrLive.ask) || 0 : 0;
 
         const pnlPrice = selectedTrade.pnlBaseline != null ? Number(selectedTrade.pnlBaseline) : selectedTrade.avgPrice;
         const rawPnl = isCommodity
@@ -132,7 +133,13 @@ export default function Portfolio() {
 
         let usdInrAdjusted = 1;
         if (isCommodity) {
-            usdInrAdjusted = rawPnl >= 0 ? (liveAsk || fallbackUsdInr * 0.90) : (liveBid || fallbackUsdInr * 1.10);
+            if (liveBid > 0 && liveAsk > 0) {
+                usdInrAdjusted = rawPnl >= 0 ? Math.min(liveBid, liveAsk) : Math.max(liveBid, liveAsk);
+            } else if (rawPnl >= 0) {
+                usdInrAdjusted = liveAsk > 0 ? liveAsk : fallbackUsdInr * 0.99;
+            } else {
+                usdInrAdjusted = liveBid > 0 ? liveBid : fallbackUsdInr * 1.01;
+            }
         }
         const currentPnl = isCommodity ? rawPnl * usdInrAdjusted : rawPnl;
         const isProfit = currentPnl >= 0;

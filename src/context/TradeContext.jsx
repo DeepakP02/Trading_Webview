@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useMemo 
 import { io } from 'socket.io-client';
 import { SOCKET_URL } from '../constants/Config';
 import { calculateEquityPnL, calculateMcxPnL } from '../utils/equityPnL';
-import { calculateUsdPnL, calculateCryptoPnL, calculateForexPnL, calculateComexPnL } from '../utils/usdPnL';
+import { calculateUsdPnL, calculateCryptoPnL, calculateForexPnL, calculateComexPnL, findUsdInrQuote } from '../utils/usdPnL';
 import { calculateSegmentMargin, isMcxSymbol } from '../utils/segmentMargin';
 import * as api from '../services/api';
 
@@ -1300,7 +1300,7 @@ export const TradeProvider = ({ children }) => {
             if (trade.is_commodity && !isMcxTrade) {
                 const lotSize = Number(trade.lot_size) || 1;
                 const fallbackUsdInr = Number(trade.usdinr_value) || 95.1;
-                const usdInrLive = livePrices['USD/INR'] || livePrices['USDINR'];
+                const usdInrLive = findUsdInrQuote(livePrices);
                 const liveBid = usdInrLive ? parseFloat(usdInrLive.bid) || null : null;
                 const liveAsk = usdInrLive ? parseFloat(usdInrLive.ask) || null : null;
 

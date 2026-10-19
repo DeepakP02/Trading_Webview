@@ -8,6 +8,7 @@ import useResponsive from '../hooks/useResponsive';
 import TradeWarningPopup from '../components/TradeWarningPopup';
 import { checkHoldTimeAllowed, isSameInstrument, detectSegment, getMinHoldTimeSeconds, getSecondsHeld } from '../utils/holdTimeUtils';
 import { isMcxSymbol } from '../utils/segmentMargin';
+import { findUsdInrQuote } from '../utils/usdPnL';
 
 const formatSymbolName = (name) => {
     if (!name) return '';
@@ -56,17 +57,22 @@ const getLiveTradePnl = (trade, livePrices, getInstrumentMeta) => {
     if (trade.is_commodity && !isMcx) {
         const lotSize = Number(trade.lot_size) || 1;
         const fallbackUsdInr = Number(trade.usdinr_value) || 95.1;
-        const usdInrLive = livePrices['USD/INR'] || livePrices['USDINR'];
-        const liveBid = usdInrLive ? parseFloat(usdInrLive.bid) || null : null;
-        const liveAsk = usdInrLive ? parseFloat(usdInrLive.ask) || null : null;
+        const usdInrLive = findUsdInrQuote(livePrices);
+        const liveBid = usdInrLive ? parseFloat(usdInrLive.bid) || 0 : 0;
+        const liveAsk = usdInrLive ? parseFloat(usdInrLive.ask) || 0 : 0;
 
         const rawPnlUsd = trade.type === 'BUY'
             ? (currentPrice - entry) * lotSize * qty
             : (entry - currentPrice) * lotSize * qty;
 
-        let usdInr = rawPnlUsd >= 0
-            ? (liveAsk || fallbackUsdInr * 0.90)
-            : (liveBid || fallbackUsdInr * 1.10);
+        let usdInr;
+        if (liveBid > 0 && liveAsk > 0) {
+            usdInr = rawPnlUsd >= 0 ? Math.min(liveBid, liveAsk) : Math.max(liveBid, liveAsk);
+        } else if (rawPnlUsd >= 0) {
+            usdInr = liveAsk > 0 ? liveAsk : fallbackUsdInr * 0.99;
+        } else {
+            usdInr = liveBid > 0 ? liveBid : fallbackUsdInr * 1.01;
+        }
 
         tradePL = rawPnlUsd * usdInr;
     } else {
