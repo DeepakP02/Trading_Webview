@@ -538,17 +538,21 @@ export const TradeProvider = ({ children }) => {
                     const changeVal = parseFloat(item.chg_pct || item.changePct || item.change) || 0;
 
                     const prevData = prev[normKey] || {};
-                    if (prevData.ltp !== ltp || prevData.bid !== bid || prevData.ask !== ask) {
+                    const high = parseFloat(item.high) || prevData.high || 0;
+                    const low = parseFloat(item.low) || prevData.low || 0;
+                    const open = parseFloat(item.open) || prevData.open || 0;
+                    const close = parseFloat(item.close) || prevData.close || 0;
+                    if (prevData.ltp !== ltp || prevData.bid !== bid || prevData.ask !== ask || prevData.high !== high || prevData.low !== low || prevData.open !== open || prevData.close !== close) {
                         next[normKey] = {
                             ...prevData,
                             ltp,
                             bid,
                             ask,
                             change: changeVal,
-                            high: parseFloat(item.high) || prevData.high || 0,
-                            low: parseFloat(item.low) || prevData.low || 0,
-                            open: parseFloat(item.open) || prevData.open || 0,
-                            close: parseFloat(item.close) || prevData.close || 0,
+                            high,
+                            low,
+                            open,
+                            close,
                         };
                         changed = true;
                     }
