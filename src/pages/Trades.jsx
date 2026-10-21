@@ -25,6 +25,54 @@ const formatSymbolName = (name) => {
     return cleanName;
 };
 
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+const parseIstMs = (raw) => {
+    if (raw == null || raw === '') return null;
+    if (raw instanceof Date) return raw.getTime();
+    if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+    const value = String(raw).trim().replace(' ', 'T');
+    if (!/^\d{4}-\d{2}-\d{2}/.test(value)) {
+        const parsed = new Date(value).getTime();
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+    const hasZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(value);
+    const parsed = new Date(hasZone ? value : `${value}+05:30`).getTime();
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const istDayStartMs = (now = Date.now()) => {
+    const ist = new Date(now + IST_OFFSET_MS);
+    ist.setUTCHours(0, 0, 0, 0);
+    return ist.getTime() - IST_OFFSET_MS;
+};
+
+const istWeekStartMs = (now = Date.now()) => {
+    const ist = new Date(now + IST_OFFSET_MS);
+    const day = ist.getUTCDay();
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const monday = new Date(ist);
+    monday.setUTCDate(ist.getUTCDate() + diffToMonday);
+    monday.setUTCHours(0, 0, 0, 0);
+    return monday.getTime() - IST_OFFSET_MS;
+};
+
+const isCarriedTrade = (trade) => {
+    const status = String(trade?.status || '').toUpperCase();
+    return status === 'HOLD' || trade?.is_carried_forward === 1 || trade?.is_carried_forward === true || trade?.is_carried_forward === '1';
+};
+
+const isInCurrentWeek = (raw, now = Date.now()) => {
+    const ms = parseIstMs(raw);
+    return ms != null && ms >= istWeekStartMs(now);
+};
+
+const placedToday = (trade, now = Date.now()) => {
+    const ms = parseIstMs(trade?.entryTimeRaw || trade?.entry_time || trade?.time);
+    if (ms == null) return true;
+    return ms >= istDayStartMs(now);
+};
+
 const carriedBaseline = (trade, entry) => {
     const status = String(trade?.status || '').toUpperCase();
     const carried = status === 'HOLD'
@@ -139,8 +187,15 @@ export default function Trades() {
     const [warningVisible, setWarningVisible] = useState(false);
     const [warningMessage, setWarningMessage] = useState('');
 
+    const [listClock, setListClock] = useState(Date.now());
+
     useEffect(() => {
         fetchInitialData();
+    }, []);
+
+    useEffect(() => {
+        const timer = setInterval(() => setListClock(Date.now()), 30000);
+        return () => clearInterval(timer);
     }, []);
 
     // Filter trades based on activeTab (aligned with mobile app TradesScreen.js)
@@ -148,7 +203,7 @@ export default function Trades() {
         if (activeTab === 'Pending') {
             const list = [];
             trades.forEach(t => {
-                if (t.isPending && !t.isCompleted && !t.exitPrice) {
+                if (t.isPending && !t.isCompleted && !t.exitPrice && placedToday(t, listClock)) {
                     list.push(t);
                 }
                 if (!t.isPending && !t.isCompleted && !t.exitPrice) {
@@ -172,13 +227,22 @@ export default function Trades() {
             return list;
         }
         if (activeTab === 'Active') {
-            return trades.filter(t => !t.isCompleted && !t.isPending && !t.exitPrice);
+            return trades.filter(t => {
+                if (t.isCompleted || t.isPending || t.exitPrice) return false;
+                if (isCarriedTrade(t)) return true;
+                return isInCurrentWeek(t.entryTimeRaw || t.entry_time || t.time, listClock);
+            });
         }
         if (activeTab === 'Closed') {
-            return trades.filter(t => t.isCompleted || !!t.exitPrice);
+            return trades.filter(t => {
+                const status = String(t.status || '').toUpperCase();
+                if (status === 'CANCELLED') return false;
+                if (!(t.isCompleted || t.exitPrice)) return false;
+                return isInCurrentWeek(t.exitTimeRaw || t.exit_time || t.exitTime || t.entryTimeRaw || t.entry_time, listClock);
+            });
         }
         return [];
-    }, [trades, activeTab]);
+    }, [trades, activeTab, listClock]);
 
     const handleOpenCloseModal = (trade) => {
         setSelectedTrade(trade);
