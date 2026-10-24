@@ -73,6 +73,20 @@ const placedToday = (trade, now = Date.now()) => {
     return ms >= istDayStartMs(now);
 };
 
+const targetSlForToday = (trade, now = Date.now()) => {
+    const stamp = trade?.target_sl_set_at;
+    if (stamp) {
+        const ms = parseIstMs(stamp);
+        if (ms != null && ms < istDayStartMs(now)) {
+            return { target: null, sl: null };
+        }
+    }
+    return {
+        target: trade?.target || trade?.target_price || null,
+        sl: trade?.stop_loss || trade?.stopLoss || trade?.sl || null,
+    };
+};
+
 const carriedBaseline = (trade, entry) => {
     const status = String(trade?.status || '').toUpperCase();
     const carried = status === 'HOLD'
@@ -207,8 +221,7 @@ export default function Trades() {
                     list.push(t);
                 }
                 if (!t.isPending && !t.isCompleted && !t.exitPrice) {
-                    const targetVal = t.target || t.target_price;
-                    const slVal = t.stop_loss || t.stopLoss || t.sl;
+                    const { target: targetVal, sl: slVal } = targetSlForToday(t, listClock);
                     if (targetVal || slVal) {
                         list.push({
                             ...t,
@@ -383,8 +396,9 @@ export default function Trades() {
             }
         }
         setSelectedTrade(trade);
-        setTargetPrice(trade.target || trade.target_price ? String(trade.target || trade.target_price) : '');
-        setStopLoss(trade.stop_loss || trade.stopLoss || trade.sl ? String(trade.stop_loss || trade.stopLoss || trade.sl) : '');
+        const todayLevels = targetSlForToday(trade);
+        setTargetPrice(todayLevels.target ? String(todayLevels.target) : '');
+        setStopLoss(todayLevels.sl ? String(todayLevels.sl) : '');
         setErrorMessage('');
         setShowTargetSlModal(true);
     };
@@ -811,8 +825,7 @@ export default function Trades() {
 
                                     {/* Row 3: Entry Price Info & Set Target/SL Button */}
                                     {(() => {
-                                        const targetVal = trade.target || trade.target_price;
-                                        const slVal = trade.stop_loss || trade.stopLoss || trade.sl;
+                                        const { target: targetVal, sl: slVal } = targetSlForToday(trade, listClock);
                                         const hasTargetOrSL = !!(targetVal || slVal);
                                         return (
                                             <>

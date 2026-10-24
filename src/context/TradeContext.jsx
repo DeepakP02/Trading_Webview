@@ -8,6 +8,20 @@ import * as api from '../services/api';
 
 const MOCK_WATCHLIST_DATA = [];
 
+const TARGET_SL_IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+const targetSlStillToday = (trade) => {
+    const raw = trade?.target_sl_set_at;
+    if (raw == null || raw === '') return true;
+    const value = String(raw).trim().replace(' ', 'T');
+    const hasZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(value);
+    const ms = new Date(hasZone ? value : `${value}+05:30`).getTime();
+    if (!Number.isFinite(ms)) return true;
+    const ist = new Date(Date.now() + TARGET_SL_IST_OFFSET_MS);
+    ist.setUTCHours(0, 0, 0, 0);
+    return ms >= ist.getTime() - TARGET_SL_IST_OFFSET_MS;
+};
+
 const TradeContext = createContext();
 
 export const useTrades = () => useContext(TradeContext);
@@ -468,7 +482,7 @@ export const TradeProvider = ({ children }) => {
             }
 
             let dataToMap = rawData;
-            if (allowedSet) {
+            if (allowedSet && allowedSet.size > 0) {
                 dataToMap = dataToMap.filter(item => allowedSet.has(item.symbol) || allowedSet.has(item.name));
             }
 
@@ -482,15 +496,17 @@ export const TradeProvider = ({ children }) => {
                     const displayName = (item.name || item.symbol).replace(/:/g, '/');
                     const normKey = normalizeSymbol(displayName);
 
-                    const ltp = item.ltp || item.price || 0;
+                    const rawLtp = parseFloat(item.ltp || item.price);
+                    const ltp = rawLtp > 0 ? rawLtp : 0;
                     const changePct = Number(item.chg_pct || item.changePct || item.change || 0);
 
                     const existingIdx = updated.findIndex(r => normalizeSymbol(r.name) === normKey);
                     if (existingIdx !== -1) {
+                        if (!(ltp > 0) && parseFloat(updated[existingIdx].ltp) > 0) return;
                         const existing = { ...updated[existingIdx] };
-                        existing.ltp = String(ltp);
-                        existing.bid = String(item.bid || ltp);
-                        existing.ask = String(item.ask || ltp);
+                        existing.ltp = String(ltp || existing.ltp || 0);
+                        existing.bid = String((parseFloat(item.bid) > 0 ? parseFloat(item.bid) : null) || ltp || existing.bid || 0);
+                        existing.ask = String((parseFloat(item.ask) > 0 ? parseFloat(item.ask) : null) || ltp || existing.ask || 0);
                         existing.change = String(changePct);
                         existing.changePct = String(changePct);
                         if (item.high != null) existing.high = String(item.high);
@@ -501,7 +517,7 @@ export const TradeProvider = ({ children }) => {
                         existing.exchange = prefix;
                         existing.type = prefix;
                         updated[existingIdx] = existing;
-                    } else {
+                    } else if (ltp > 0) {
                         updated.push({
                             id: `${type}-${item.symbol}`,
                             name: displayName,
@@ -532,12 +548,15 @@ export const TradeProvider = ({ children }) => {
                 let changed = false;
                 dataToMap.forEach(item => {
                     const normKey = normalizeSymbol(item.name || item.symbol);
-                    const ltp = parseFloat(item.ltp || item.price) || 0;
-                    const bid = parseFloat(item.bid) || ltp;
-                    const ask = parseFloat(item.ask) || ltp;
-                    const changeVal = parseFloat(item.chg_pct || item.changePct || item.change) || 0;
-
                     const prevData = prev[normKey] || {};
+                    const rawLtp = parseFloat(item.ltp || item.price);
+                    const ltp = rawLtp > 0 ? rawLtp : (Number(prevData.ltp) || 0);
+                    const rawBid = parseFloat(item.bid);
+                    const rawAsk = parseFloat(item.ask);
+                    const bid = rawBid > 0 ? rawBid : (ltp || Number(prevData.bid) || 0);
+                    const ask = rawAsk > 0 ? rawAsk : (ltp || Number(prevData.ask) || 0);
+                    if (!(ltp > 0)) return;
+                    const changeVal = parseFloat(item.chg_pct || item.changePct || item.change) || 0;
                     const high = parseFloat(item.high) || prevData.high || 0;
                     const low = parseFloat(item.low) || prevData.low || 0;
                     const open = parseFloat(item.open) || prevData.open || 0;
@@ -643,11 +662,12 @@ export const TradeProvider = ({ children }) => {
             exitPrice: (!stillWorking && t.exit_price) ? t.exit_price.toString() : null,
             margin_used: Number(t.margin_used) || 0,
             pnl: Number(t.pnl) || 0,
-            stop_loss: t.stop_loss || null,
-            stopLoss: t.stop_loss || null,
-            sl: t.stop_loss || null,
-            target: t.target_price || null,
-            target_price: t.target_price || null,
+            stop_loss: targetSlStillToday(t) ? (t.stop_loss || null) : null,
+            stopLoss: targetSlStillToday(t) ? (t.stop_loss || null) : null,
+            sl: targetSlStillToday(t) ? (t.stop_loss || null) : null,
+            target: targetSlStillToday(t) ? (t.target_price || null) : null,
+            target_price: targetSlStillToday(t) ? (t.target_price || null) : null,
+            target_sl_set_at: targetSlStillToday(t) ? (t.target_sl_set_at || null) : null,
             brokerage: Number(t.brokerage) || 0,
             time: t.entry_time ? new Date(t.entry_time).toLocaleString('en-IN') : '',
             entryTimeRaw: t.entry_time || t.created_at || '',
@@ -915,7 +935,8 @@ export const TradeProvider = ({ children }) => {
     const setTargetSL = async (id, target, sl) => {
         try {
             await api.setTargetSL(id, target, sl);
-            setTrades(prev => prev.map(t => t.id === id ? { ...t, target, target_price: target, sl, stop_loss: sl, stopLoss: sl } : t));
+            const targetSlSetAt = (target || sl) ? new Date().toISOString() : null;
+            setTrades(prev => prev.map(t => t.id === id ? { ...t, target, target_price: target, sl, stop_loss: sl, stopLoss: sl, target_sl_set_at: targetSlSetAt } : t));
             return { success: true };
         } catch (err) {
             throw err;
@@ -1730,21 +1751,21 @@ export const TradeProvider = ({ children }) => {
                     if (i.symbol) cryptoSet.add(i.symbol);
                     if (i.name) cryptoSet.add(i.name);
                 });
-                allowedCryptoSymbolsRef.current = cryptoSet;
+                if (cryptoSet.size > 0) allowedCryptoSymbolsRef.current = cryptoSet;
 
                 const forexSet = new Set();
                 rawForex.forEach(i => {
                     if (i.symbol) forexSet.add(i.symbol);
                     if (i.name) forexSet.add(i.name);
                 });
-                allowedForexSymbolsRef.current = forexSet;
+                if (forexSet.size > 0) allowedForexSymbolsRef.current = forexSet;
 
                 const commoditySet = new Set();
                 rawCommodity.forEach(i => {
                     if (i.symbol) commoditySet.add(i.symbol);
                     if (i.name) commoditySet.add(i.name);
                 });
-                allowedCommoditySymbolsRef.current = commoditySet;
+                if (commoditySet.size > 0) allowedCommoditySymbolsRef.current = commoditySet;
 
                 const mapExtra = (items, prefix, catName) => {
                     items.forEach(item => {
@@ -1754,6 +1775,7 @@ export const TradeProvider = ({ children }) => {
                         const displayName = (item.name || item.symbol).replace(/:/g, '/');
                         const normKey = normalizeSymbol(displayName);
                         const price = parseFloat(item.ltp || item.price) || 0;
+                        if (!(price > 0)) return;
                         const changeVal = parseFloat(item.changePct || item.change) || 0;
 
                         newLivePrices[normKey] = {
@@ -1846,11 +1868,15 @@ export const TradeProvider = ({ children }) => {
             setDataError('⚠️ Demo Mode - Kite API Offline (Showing Simulated Prices)');
         }
 
-        // 5. Run price fluctuations for all inactive/simulated scripts in the merged map
+        // 5. Simulated prices stay on Kite scripts that have no server quote.
+        // Crypto, forex and commodity keep the Allticks price.
         mergedItemsMap.forEach(item => {
+            const cat = item.category || item.exchange;
+            if (cat === 'CRYPTO' || cat === 'FOREX' || cat === 'COMMODITY') return;
             const normKey = normalizeSymbol(item.name);
             if (!newLivePrices.hasOwnProperty(normKey)) {
                 const currentLtp = parseFloat(item.ltp) || 0;
+                if (!(currentLtp > 0)) return;
                 const randomChange = (Math.random() - 0.5) * 0.002 * currentLtp;
                 const newLtp = Number((currentLtp + randomChange).toFixed(2));
                 const baseChange = parseFloat(item.change) || 0;
@@ -1880,8 +1906,36 @@ export const TradeProvider = ({ children }) => {
 
         // 6. Commit merged watchlist array to state to prevent lists resizing or flashing
         const finalWatchlist = Array.from(mergedItemsMap.values());
-        setKiteMarketData(finalWatchlist);
-        setLivePrices(prev => ({ ...prev, ...newLivePrices }));
+        const allticksCats = new Set(['CRYPTO', 'FOREX', 'COMMODITY']);
+        setKiteMarketData(prev => {
+            const prevAllticks = prev.filter(item => allticksCats.has(item.category || item.exchange));
+            const prevByKey = new Map(prevAllticks.map(item => [normalizeSymbol(item.name), item]));
+            const next = finalWatchlist.map(item => {
+                if (!allticksCats.has(item.category || item.exchange)) return item;
+                const old = prevByKey.get(normalizeSymbol(item.name));
+                if (old && !(parseFloat(item.ltp) > 0) && parseFloat(old.ltp) > 0) {
+                    return { ...item, ltp: old.ltp, bid: old.bid, ask: old.ask, high: old.high, low: old.low, open: old.open, close: old.close };
+                }
+                return item;
+            });
+            const nextKeys = new Set(next.filter(item => allticksCats.has(item.category || item.exchange)).map(item => normalizeSymbol(item.name)));
+            const kept = prevAllticks.filter(item => !nextKeys.has(normalizeSymbol(item.name)) && parseFloat(item.ltp) > 0);
+            return kept.length > 0 ? [...next, ...kept] : next;
+        });
+        setLivePrices(prev => {
+            const merged = { ...prev };
+            const protectedKeys = new Set();
+            finalWatchlist.forEach(item => {
+                if (allticksCats.has(item.category || item.exchange)) protectedKeys.add(normalizeSymbol(item.name));
+            });
+            Object.keys(newLivePrices).forEach(k => {
+                const nextPrice = newLivePrices[k];
+                const old = merged[k];
+                if (protectedKeys.has(k) && old && !(Number(nextPrice.ltp) > 0) && Number(old.ltp) > 0) return;
+                merged[k] = nextPrice;
+            });
+            return merged;
+        });
         
         if (!kiteLoadedRef.current) {
             kiteLoadedRef.current = true;
